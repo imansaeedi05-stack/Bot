@@ -125,6 +125,9 @@ async def resolve_and_join_chat(user_client: Client, target: str) -> int:
 
 @bot.on_message(filters.command("start") & owner_filter)
 async def start_cmd(client, message):
+  keyboard = InlineKeyboardMarkup([
+      [InlineKeyboardButton("📢 ورود به کانال A_ToolsX", url="https://t.me/A_ToolsX")]
+  ])
   text = (
       "🤖 **ربات مدیریت اکانت‌های ویس‌چت**\n\n"
       "🔹 `/addacc` - افزودن اکانت جدید\n"
@@ -134,7 +137,7 @@ async def start_cmd(client, message):
       "🔹 `/leavevc` - خروج اکانت‌ها از ویس‌کال\n"
       "🔹 `/reload` - بازیابی مجدد سشن‌ها\n"
   )
-  await message.reply_text(text)
+  await message.reply_text(text, reply_markup=keyboard)
 
 
 @bot.on_message(filters.command("addacc") & owner_filter)
@@ -171,8 +174,7 @@ async def del_acc_cmd(client, message):
     ])
 
   await message.reply_text(
-      "📋 **مدیریت اکانت‌ها:**\nروی اکانتی که می‌‌خواهید از ربات حذف شود کلیک"
-      " کنید:",
+      "📋 **مدیریت اکانت‌ها:**\nروی اکانتی که می‌‌خواهید از ربات حذف شود کلیک کنید:",
       reply_markup=InlineKeyboardMarkup(buttons),
   )
 
@@ -302,7 +304,7 @@ async def join_vc(client, message):
     await message.reply_text("❌ هیچ اکانتی یافت نشد.")
     return
 
-  msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌چت...")
+  msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌‌چت...")
   joined = 0
   failed = 0
 
@@ -314,9 +316,7 @@ async def join_vc(client, message):
       joined += 1
 
       if joined % 5 == 0:
-        await msg.edit_text(
-            f"⏳ در حال ورود... تا الان {joined} اکانت وارد شدند."
-        )
+        await msg.edit_text(f"⏳ در حال ورود... تا الان {joined} اکانت وارد شدند.")
 
       await asyncio.sleep(2)
     except Exception as e:
