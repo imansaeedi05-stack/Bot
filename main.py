@@ -18,7 +18,9 @@ def home():
 
 
 def run_flask():
-  app.run(host="0.0.0.0", port=8080)
+  # خواندن پورت اختصاصی رندر به صورت خودکار
+  port = int(os.environ.get("PORT", 8080))
+  app.run(host="0.0.0.0", port=port)
 
 
 threading.Thread(target=run_flask, daemon=True).start()
@@ -301,7 +303,7 @@ async def join_vc(client, message):
     await message.reply_text("❌ هیچ اکانتی یافت نشد.")
     return
 
-  msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌‌چت...")
+  msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌چت...")
   joined = 0
   failed = 0
 
@@ -344,7 +346,6 @@ async def leave_vc(client, message):
 
 async def main():
   await bot.start()
-  await bot.delete_webhook()
   await load_saved_sessions()
   asyncio.create_task(keep_alive_task())
   asyncio.Event().wait()
