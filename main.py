@@ -6,7 +6,7 @@ import threading
 from flask import Flask
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
-from pytgcalls.pytgcalls import PyTgCalls
+from pytgcalls import PyTgCalls
 
 app = Flask("")
 
