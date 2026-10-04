@@ -18,7 +18,6 @@ def home():
 
 
 def run_flask():
-  # خواندن پورت اختصاصی رندر به صورت خودکار
   port = int(os.environ.get("PORT", 8080))
   app.run(host="0.0.0.0", port=port)
 
