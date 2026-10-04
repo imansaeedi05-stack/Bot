@@ -6,7 +6,7 @@ import threading
 from flask import Flask
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
-from pytgcalls import PyTgCalls
+from pytgcalls.pytgcalls import PyTgCalls
 
 app = Flask("")
 
@@ -80,7 +80,6 @@ async def load_saved_sessions():
       client = Client(session_path, api_id=API_ID, api_hash=API_HASH)
       await client.start()
       
-      # هماهنگ‌شده با ساختار نسخه جدید pytgcalls
       call_app = PyTgCalls(client)
       await call_app.start()
 
@@ -309,7 +308,6 @@ async def join_vc(client, message):
     user_cli = user_clients[phone]
     try:
       chat_id = await resolve_and_join_chat(user_cli, target)
-      # استفاده از متدهای نسخه جدید برای پیوستن به ویس‌کال
       await call_app.join_group_call(chat_id)
       joined += 1
 
