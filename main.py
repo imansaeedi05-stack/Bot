@@ -28,7 +28,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# اطلاعات شما که مستقیماً در کد قرار گرفت
 API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
 BOT_TOKEN = "8610788849:AAFu-oLDMAyFNUYN8RRi6oRM7XeHJ58q-Fs"
@@ -80,6 +79,8 @@ async def load_saved_sessions():
       session_path = os.path.join(SESSIONS_DIR, phone)
       client = Client(session_path, api_id=API_ID, api_hash=API_HASH)
       await client.start()
+      
+      # هماهنگ‌شده با ساختار نسخه جدید pytgcalls
       call_app = PyTgCalls(client)
       await call_app.start()
 
@@ -308,8 +309,8 @@ async def join_vc(client, message):
     user_cli = user_clients[phone]
     try:
       chat_id = await resolve_and_join_chat(user_cli, target)
-      await call_app.play(chat_id)
-      await call_app.mute_stream(chat_id)
+      # استفاده از متدهای نسخه جدید برای پیوستن به ویس‌کال
+      await call_app.join_group_call(chat_id)
       joined += 1
 
       if joined % 5 == 0:
@@ -334,7 +335,7 @@ async def leave_vc(client, message):
   for phone, call_app in list(pytgcalls_clients.items()):
     try:
       for call in call_app.active_calls:
-        await call_app.leave_call(call.chat_id)
+        await call_app.leave_group_call(call.chat_id)
         left += 1
     except Exception as e:
       logger.error(f"Error leaving {phone}: {e}")
