@@ -1,4 +1,0 @@
-pyrogram
-pytgcalls
-flask
-tgcrypto
