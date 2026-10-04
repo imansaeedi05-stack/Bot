@@ -1,4 +1,2 @@
 pyrogram
 pytgcalls
-flask
-tgcrypto
