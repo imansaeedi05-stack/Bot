@@ -7,7 +7,7 @@ from flask import Flask
 from pyrogram import Client, filters
 from pyrogram.errors import PasswordHashInvalid, PhoneCodeInvalid, SessionPasswordNeeded
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
-from pytgcalls import PyTgCalls
+from pytgcalls import GroupCallFactory
 
 app = Flask("")
 
@@ -81,7 +81,7 @@ async def load_saved_sessions():
       client = Client(session_path, api_id=API_ID, api_hash=API_HASH)
       await client.start()
       
-      call_app = PyTgCalls(client)
+      call_app = GroupCallFactory(client).get_group_call()
       await call_app.start()
 
       user_clients[phone] = client
@@ -252,7 +252,7 @@ async def handle_login(client, message):
     phone = step_data["phone"]
     try:
       await temp_client.sign_in(phone, step_data["hash"], code)
-      call_app = PyTgCalls(temp_client)
+      call_app = GroupCallFactory(temp_client).get_group_call()
       await call_app.start()
 
       user_clients[phone] = temp_client
@@ -274,7 +274,7 @@ async def handle_login(client, message):
     phone = step_data["phone"]
     try:
       await temp_client.check_password(password)
-      call_app = PyTgCalls(temp_client)
+      call_app = GroupCallFactory(temp_client).get_group_call()
       await call_app.start()
 
       user_clients[phone] = temp_client
@@ -301,7 +301,7 @@ async def join_vc(client, message):
     await message.reply_text("❌ هیچ اکانتی یافت نشد.")
     return
 
-  msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌چت...")
+  msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌‌چت...")
   joined = 0
   failed = 0
 
@@ -347,7 +347,7 @@ async def main():
   await bot.delete_webhook()
   await load_saved_sessions()
   asyncio.create_task(keep_alive_task())
-  await asyncio.Event().wait()
+  asyncio.Event().wait()
 
 
 if __name__ == "__main__":
