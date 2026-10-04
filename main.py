@@ -389,7 +389,7 @@ async def main():
   await bot.start()
   await load_saved_sessions()
   asyncio.create_task(keep_alive_task())
-  asyncio.Event().wait()
+  await asyncio.Event().wait()  # اینجا کلمه await اصلاح شد
 
 
 if __name__ == "__main__":
