@@ -5,7 +5,7 @@ import re
 import threading
 from flask import Flask
 from pyrogram import Client, filters, idle
-from pyrogram.errors import PasswordHashInvalid, PhoneCodeInvalid, SessionPasswordNeeded
+from pyrogram.errors import PasswordHashInvalid, PhoneCodeInvalid, SessionPasswordNeeded, UserNotParticipant
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from pytgcalls import GroupCallFactory
 
@@ -32,6 +32,9 @@ API_HASH = "5232c81647167a853b97fcadf68ea9d2"
 BOT_TOKEN = "8370573441:AAH0-d7dXkUiigYqLOp0_0M-3jAxtCJjFf0"
 OWNER_ID = 7165683193
 
+# آیدی کانال شما برای اجبار به عضویت
+REQUIRED_CHANNEL = "feel_your_touch"
+
 bot = Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 user_clients = {}
@@ -46,6 +49,19 @@ owner_filter = filters.create(is_owner)
 SESSIONS_DIR = "sessions"
 if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
+
+async def check_subscription(client, user_id):
+    # برای مالک ربات اجباری نباشد یا بررسی شود (اختیاری: مالک همیشه رد شود)
+    if user_id == OWNER_ID:
+        return True
+    try:
+        await client.get_chat_member(REQUIRED_CHANNEL, user_id)
+        return True
+    except UserNotParticipant:
+        return False
+    except Exception as e:
+        logger.error(f"Error checking subscription: {e}")
+        return True # اگر خطایی رخ داد برای اینکه کاربر معطل نشود اجازه عبور بدهیم یا بررسی کنیم
 
 async def keep_alive_task():
     while True:
@@ -110,6 +126,19 @@ async def resolve_and_join_chat(user_client: Client, target: str) -> int:
 
 @bot.on_message(filters.command("start") & owner_filter)
 async def start_cmd(client, message):
+    # بررسی عضویت در کانال
+    is_joined = await check_subscription(client, message.from_user.id)
+    if not is_joined:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📢 ورود به کانال", url="https://t.me/feel_your_touch")],
+            [InlineKeyboardButton("🔄 بررسی مجدد عضویت", callback_data="check_sub")]
+        ])
+        await message.reply_text(
+            "❌ برای استفاده از ربات، لطفاً ابتدا در کانال زیر عضو شوید و سپس روی دکمه‌ی بررسی مجدد کلیک کنید:",
+            reply_markup=keyboard
+        )
+        return
+
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("➕ افزودن اکانت", callback_data="menu_add"),
@@ -127,11 +156,42 @@ async def start_cmd(client, message):
     )
     await message.reply_text(text, reply_markup=keyboard)
 
+@bot.on_callback_query(filters.regex(r"^check_sub$"))
+async def callback_check_sub(client, callback_query):
+    user_id = callback_query.from_user.id
+    is_joined = await check_subscription(client, user_id)
+    if not is_joined:
+        await callback_query.answer("❌ شما هنوز در کانال عضو نشده‌اید!", show_alert=True)
+        return
+
+    await callback_query.message.delete()
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("➕ افزودن اکانت", callback_data="menu_add"),
+            InlineKeyboardButton("📋 لیست اکانت‌ها", callback_data="menu_list"),
+        ],
+        [
+            InlineKeyboardButton("🗑 حذف اکانت", callback_data="menu_del"),
+            InlineKeyboardButton("🔄 بازخوانی سشن‌ها", callback_data="menu_reload"),
+        ],
+    ])
+    text = (
+        "✅ عضویت شما تایید شد!\n\n"
+        "🤖 **پنل مدیریت پیشرفته اکانت‌های ویس‌چت**\n\n"
+        "از دکمه‌های شیشه‌ای زیر برای مدیریت سریع ربات استفاده کنید:"
+    )
+    await callback_query.message.reply_text(text, reply_markup=keyboard)
+
 @bot.on_callback_query(filters.regex(r"^menu_"))
 async def callback_menu(client, callback_query):
+    user_id = callback_query.from_user.id
+    if not await check_subscription(client, user_id):
+        await callback_query.answer("❌ ابتدا باید در کانال عضو شوید!", show_alert=True)
+        return
+
     data = callback_query.data
     if data == "menu_add":
-        user_login_steps[callback_query.from_user.id] = {"step": "phone"}
+        user_login_steps[user_id] = {"step": "phone"}
         await callback_query.message.edit_text(
             "📱 شماره تلفن را با کد کشور بفرستید (مثال: `+989123456789`):"
         )
@@ -166,6 +226,8 @@ async def callback_menu(client, callback_query):
 
 @bot.on_message(filters.command("addacc") & owner_filter)
 async def add_acc(client, message):
+    if not await check_subscription(client, message.from_user.id):
+        return
     user_login_steps[message.from_user.id] = {"step": "phone"}
     await message.reply_text(
         "📱 شماره تلفن را با کد کشور بفرستید (مثال: `+989123456789`):"
@@ -173,6 +235,8 @@ async def add_acc(client, message):
 
 @bot.on_message(filters.command("accounts") & owner_filter)
 async def list_accs(client, message):
+    if not await check_subscription(client, message.from_user.id):
+        return
     await load_saved_sessions()
     if not user_clients:
         await message.reply_text("❌ هیچ اکانتی فعال نیست.")
@@ -184,6 +248,8 @@ async def list_accs(client, message):
 
 @bot.on_message(filters.command("delacc") & owner_filter)
 async def del_acc_cmd(client, message):
+    if not await check_subscription(client, message.from_user.id):
+        return
     await load_saved_sessions()
     if not user_clients:
         await message.reply_text("❌ هیچ اکانتی برای حذف وجود ندارد.")
@@ -235,6 +301,8 @@ async def callback_del_acc(client, callback_query):
 
 @bot.on_message(filters.command("reload") & owner_filter)
 async def reload_accs(client, message):
+    if not await check_subscription(client, message.from_user.id):
+        return
     msg = await message.reply_text("⏳ در حال بازیابی سشن‌ها...")
     await load_saved_sessions()
     await msg.edit_text(
@@ -311,6 +379,8 @@ async def handle_login(client, message):
 
 @bot.on_message(filters.command("joinvc") & owner_filter)
 async def join_vc(client, message):
+    if not await check_subscription(client, message.from_user.id):
+        return
     if len(message.command) < 2:
         await message.reply_text("❌ لطفاً لینک یا یوزرنیم گروه را وارد کنید.")
         return
@@ -322,7 +392,7 @@ async def join_vc(client, message):
         await message.reply_text("❌ هیچ اکانتی یافت نشد.")
         return
 
-    msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌‌‌‌چت...")
+    msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌چت...")
     joined = 0
     failed = 0
 
@@ -347,6 +417,8 @@ async def join_vc(client, message):
 
 @bot.on_message(filters.command("leavevc") & owner_filter)
 async def leave_vc(client, message):
+    if not await check_subscription(client, message.from_user.id):
+        return
     msg = await message.reply_text("⏳ در حال خروج اکانت‌ها از ویس‌چت...")
     left = 0
     for phone, call_app in list(pytgcalls_clients.items()):
