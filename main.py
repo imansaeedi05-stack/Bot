@@ -20,7 +20,7 @@ app = Flask("")
 
 @app.route("/")
 def home():
-    return "Bot is Alive & Running!"
+    return "Bot is Alive & Running 24/7!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -80,6 +80,21 @@ async def load_saved_sessions():
         except Exception:
             pass
 
+# لوپ نگهدارنده پایداری استریم‌ها در پس‌زمینه برای جلوگیری از قطعی ۱۰ دقیقه‌ای
+async def stability_background_loop():
+    while True:
+        await asyncio.sleep(180) # هر ۳ دقیقه یک‌بار وضعیت را بررسی می‌کند
+        for phone, chat_id in list(active_chats.items()):
+            call_client = pytgcalls_clients.get(phone)
+            user_cli = user_clients.get(phone)
+            if call_client and user_cli:
+                try:
+                    # بررسی و بازنشانی اتصال در صورت افت کیفیت یا سکوت شبکه
+                    if os.path.exists(SILENT_AUDIO):
+                        await call_client.change_stream(chat_id, AudioPiped(SILENT_AUDIO))
+                except Exception:
+                    pass
+
 def get_main_keyboard():
     return InlineKeyboardMarkup([
         [
@@ -87,7 +102,7 @@ def get_main_keyboard():
             InlineKeyboardButton("📋 لیست اکانت‌ها", callback_data="panel_list"),
         ],
         [
-            InlineKeyboardButton("🎧 ورود ۲۵ اکانت به ویس (پایدار)", callback_data="panel_joinvc"),
+            InlineKeyboardButton("🎧 ورود ۴ اکانت (پایدار ۲ ساعته)", callback_data="panel_joinvc"),
             InlineKeyboardButton("🚪 خروج از ویس", callback_data="panel_leavevc"),
         ],
         [
@@ -98,9 +113,13 @@ def get_main_keyboard():
 
 @bot.on_message(filters.command("start"))
 async def start_cmd(client, message):
+    # شروع لوپ پایداری در اولین استارت ربات
+    if not any(t.get_name() == "stability_task" for t in asyncio.all_tasks()):
+        asyncio.create_task(stability_background_loop(), name="stability_task")
+        
     await message.reply_text(
-        "🤖 **پنل مدیریت ویس‌چت انبوه (نسخه پایداری ۲ ساعته)**\n\n"
-        "لطفاً از دکمه‌های زیر استفاده کنید:",
+        "🤖 **پنل مدیریت ویس‌چت (نسخه ضد قطعی)**\n\n"
+        "سیستم پایداری فعال است و اکانت‌ها در کال می‌مانند.",
         reply_markup=get_main_keyboard()
     )
 
@@ -126,7 +145,7 @@ async def callback_panel(client, callback_query):
     elif data == "panel_joinvc":
         user_login_steps[user_id] = {"step": "vc_target"}
         await callback_query.message.edit_text(
-            "🔗 لطفاً لینک یا آیدی گروه/کانال را برای ورود پایدار اکانت‌ها بفرستید:"
+            "🔗 لطفاً لینک یا آیدی گروه/کانال را برای ورود پایدار بفرستید:"
         )
     elif data == "panel_leavevc":
         await callback_query.message.edit_text("⏳ در حال خروج اکانت‌ها از ویس‌چت...")
@@ -159,7 +178,7 @@ async def callback_panel(client, callback_query):
         await callback_query.answer(f"✅ بازخوانی شد. اکانت‌ها: {len(user_clients)}", show_alert=True)
     elif data == "panel_back":
         await callback_query.message.edit_text(
-            "🤖 **پنل مدیریت ویس‌چت انبوه**",
+            "🤖 **پنل مدیریت ویس‌چت**",
             reply_markup=get_main_keyboard()
         )
 
@@ -210,41 +229,43 @@ async def handle_user_input(client, message):
         if target.startswith("@"):
             target = target[1:]
 
-        msg = await message.reply_text(f"⏳ در حال اتصال امن و پلکانی {len(pytgcalls_clients)} اکانت به ویس‌چت...\n(این کار برای پایداری ۲ ساعته با فاصله انجام می‌شود)")
+        msg = await message.reply_text("⏳ در حال اتصال پایدار اکانت‌ها به ویس‌چت...")
         success = 0
+
+        # اطمینان از اجرای لوپ پایداری پس‌زمینه
+        if not any(t.get_name() == "stability_task" for t in asyncio.all_tasks()):
+            asyncio.create_task(stability_background_loop(), name="stability_task")
 
         for phone, call_client in pytgcalls_clients.items():
             user_cli = user_clients[phone]
             try:
                 chat_id = None
                 try:
-                    chat = await asyncio.wait_for(user_cli.join_chat(target), timeout=10)
+                    chat = await asyncio.wait_for(user_cli.join_chat(target), timeout=15)
                     chat_id = chat.id
                 except Exception:
-                    chat_obj = await asyncio.wait_for(user_cli.get_chat(target), timeout=10)
+                    chat_obj = await asyncio.wait_for(user_cli.get_chat(target), timeout=15)
                     chat_id = chat_obj.id
 
                 if chat_id:
                     if os.path.exists(SILENT_AUDIO):
-                        # استفاده از AudioPiped با قابلیت استریم پایدار
                         await asyncio.wait_for(
                             call_client.join_group_call(chat_id, AudioPiped(SILENT_AUDIO)),
-                            timeout=10
+                            timeout=15
                         )
                     else:
                         await asyncio.wait_for(
                             call_client.join_group_call(chat_id),
-                            timeout=10
+                            timeout=15
                         )
                     active_chats[phone] = chat_id
                     success += 1
                 
-                # فاصله ۵ ثانیه‌ای بین هر اتصال برای جلوگیری از FloodWait و کرش رم
-                await asyncio.sleep(5)
+                await asyncio.sleep(4)
             except Exception:
                 pass
 
-        await msg.edit_text(f"📊 **نتیجه اتصال پایدار:**\n\n✅ {success} اکانت با موفقیت وارد ویس شدند و استریم صوتی برای ماندگاری طولانی فعال شد.", reply_markup=get_main_keyboard())
+        await msg.edit_text(f"📊 **نتیجه اتصال پایدار:**\n\n✅ {success} اکانت با موفقیت متصل شدند و در حالت ماندگار قرار گرفتند.", reply_markup=get_main_keyboard())
         return
 
     if step == "phone":
