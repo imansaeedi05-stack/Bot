@@ -7,7 +7,7 @@ import telebot
 # اطلاعات حساب و ربات شما
 API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
-BOT_TOKEN = "8797575830:AAFpfYUsF4P-YwQ1HwTeDGhDAWtljxWuGOY"
+BOT_TOKEN = "8610788849:AAFu-oLDMAyFNUYN8RRi6oRM7XeHJ58q-Fs"
 
 # راه‌‌‌‌اندازی ربات با telebot برای پاسخگویی سریع و تضمینی به دستورات و دکمه‌ها
 bot = telebot.TeleBot(BOT_TOKEN)
