@@ -1,5 +1,4 @@
-Flask==3.0.3
-Pyrogram==2.0.106
-Tgcrypto
-pyTelegramBotAPI==4.23.0
-py-tgcalls==0.9.7
+pyrogram
+tgcalls
+py-tgcalls
+flask
