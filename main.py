@@ -38,8 +38,7 @@ logger = logging.getLogger(__name__)
 
 API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
-BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
-OWNER_ID = 7165683193
+BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8" # توکن جدید شما
 
 REQUIRED_CHANNEL = "@feel_your_touch"
 REQUIRED_CHANNEL_URL = "https://t.me/feel_your_touch"
@@ -50,34 +49,23 @@ user_clients = {}
 pytgcalls_clients = {}
 user_login_steps = {}
 
-def is_owner(_, __, message: Message):
-    return bool(message.from_user and message.from_user.id == OWNER_ID)
-
-owner_filter = filters.create(is_owner)
-
 SESSIONS_DIR = "sessions"
 if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
 
 async def check_subscription(client, user_id):
-    if user_id == OWNER_ID:
-        return True
-
     try:
         member = await client.get_chat_member(
             REQUIRED_CHANNEL,
             user_id
         )
-
         return member.status in (
             "member",
             "administrator",
             "owner"
         )
-
     except UserNotParticipant:
         return False
-
     except Exception as e:
         logger.error(f"Error checking subscription: {e}")
         return False
@@ -155,20 +143,9 @@ async def start_cmd(client, message):
 
     if not await check_subscription(client, user_id):
         keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton(
-                    "📢 عضویت در کانال",
-                    url=REQUIRED_CHANNEL_URL
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🔄 بررسی عضویت",
-                    callback_data="check_sub"
-                )
-            ]
+            [InlineKeyboardButton("📢 عضویت در کانال", url=REQUIRED_CHANNEL_URL)],
+            [InlineKeyboardButton("🔄 بررسی عضویت", callback_data="check_sub")]
         ])
-
         await message.reply_text(
             "❌ برای استفاده از ربات ابتدا باید در کانال زیر عضو شوید:\n\n"
             "📢 @feel_your_touch\n\n"
@@ -179,24 +156,12 @@ async def start_cmd(client, message):
 
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton(
-                "➕ افزودن اکانت",
-                callback_data="menu_add"
-            ),
-            InlineKeyboardButton(
-                "📋 لیست اکانت‌ها",
-                callback_data="menu_list"
-            )
+            InlineKeyboardButton("➕ افزودن اکانت", callback_data="menu_add"),
+            InlineKeyboardButton("📋 لیست اکانت‌ها", callback_data="menu_list"),
         ],
         [
-            InlineKeyboardButton(
-                "🗑 حذف اکانت",
-                callback_data="menu_del"
-            ),
-            InlineKeyboardButton(
-                "🔄 بازخوانی سشن‌ها",
-                callback_data="menu_reload"
-            )
+            InlineKeyboardButton("🗑 حذف اکانت", callback_data="menu_del"),
+            InlineKeyboardButton("🔄 بازخوانی سشن‌ها", callback_data="menu_reload"),
         ],
     ])
 
@@ -211,40 +176,22 @@ async def callback_check_sub(client, callback_query):
     user_id = callback_query.from_user.id
 
     if not await check_subscription(client, user_id):
-        await callback_query.answer(
-            "❌ هنوز در کانال عضو نشده‌اید.",
-            show_alert=True
-        )
+        await callback_query.answer("❌ هنوز در کانال عضو نشده‌اید.", show_alert=True)
         return
 
     await callback_query.message.delete()
-
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton(
-                "➕ افزودن اکانت",
-                callback_data="menu_add"
-            ),
-            InlineKeyboardButton(
-                "📋 لیست اکانت‌ها",
-                callback_data="menu_list"
-            )
+            InlineKeyboardButton("➕ افزودن اکانت", callback_data="menu_add"),
+            InlineKeyboardButton("📋 لیست اکانت‌ها", callback_data="menu_list"),
         ],
         [
-            InlineKeyboardButton(
-                "🗑 حذف اکانت",
-                callback_data="menu_del"
-            ),
-            InlineKeyboardButton(
-                "🔄 بازخوانی سشن‌ها",
-                callback_data="menu_reload"
-            )
+            InlineKeyboardButton("🗑 حذف اکانت", callback_data="menu_del"),
+            InlineKeyboardButton("🔄 بازخوانی سشن‌ها", callback_data="menu_reload"),
         ],
     ])
-
     await callback_query.message.reply_text(
-        "✅ عضویت شما تأیید شد!\n\n"
-        "🤖 **پنل مدیریت پیشرفته اکانت‌های ویس‌چت**",
+        "✅ عضویت شما تأیید شد!\n\n🤖 **پنل مدیریت پیشرفته اکانت‌های ویس‌چت**",
         reply_markup=keyboard
     )
 
@@ -258,9 +205,7 @@ async def callback_menu(client, callback_query):
     data = callback_query.data
     if data == "menu_add":
         user_login_steps[user_id] = {"step": "phone"}
-        await callback_query.message.edit_text(
-            "📱 شماره تلفن را با کد کشور بفرستید (مثال: `+989123456789`):"
-        )
+        await callback_query.message.edit_text("📱 شماره تلفن را با کد کشور بفرستید (مثال: `+989123456789`):")
     elif data == "menu_list":
         await load_saved_sessions()
         if not user_clients:
@@ -275,31 +220,23 @@ async def callback_menu(client, callback_query):
         if not user_clients:
             await callback_query.answer("❌ هیچ اکانتی برای حذف وجود ندارد.", show_alert=True)
             return
-        buttons = []
-        for phone in user_clients.keys():
-            buttons.append([
-                InlineKeyboardButton(f"🗑 حذف {phone}", callback_data=f"del_{phone}")
-            ])
+        buttons = [[InlineKeyboardButton(f"🗑 حذف {phone}", callback_data=f"del_{phone}")] for phone in user_clients.keys()]
         await callback_query.message.edit_text(
             "📋 **مدیریت اکانت‌ها:**\nروی اکانتی که می‌خواهید حذف شود کلیک کنید:",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
     elif data == "menu_reload":
         await load_saved_sessions()
-        await callback_query.answer(
-            f"✅ بازخوانی شد. اکانت‌های آماده: {len(user_clients)}", show_alert=True
-        )
+        await callback_query.answer(f"✅ بازخوانی شد. اکانت‌های آماده: {len(user_clients)}", show_alert=True)
 
-@bot.on_message(filters.command("addacc") & owner_filter)
+@bot.on_message(filters.command("addacc"))
 async def add_acc(client, message):
     if not await check_subscription(client, message.from_user.id):
         return
     user_login_steps[message.from_user.id] = {"step": "phone"}
-    await message.reply_text(
-        "📱 شماره تلفن را با کد کشور بفرستید (مثال: `+989123456789`):"
-    )
+    await message.reply_text("📱 شماره تلفن را با کد کشور بفرستید (مثال: `+989123456789`):")
 
-@bot.on_message(filters.command("accounts") & owner_filter)
+@bot.on_message(filters.command("accounts"))
 async def list_accs(client, message):
     if not await check_subscription(client, message.from_user.id):
         return
@@ -312,7 +249,7 @@ async def list_accs(client, message):
         text += f"👤 `{phone}`\n"
     await message.reply_text(text)
 
-@bot.on_message(filters.command("delacc") & owner_filter)
+@bot.on_message(filters.command("delacc"))
 async def del_acc_cmd(client, message):
     if not await check_subscription(client, message.from_user.id):
         return
@@ -320,22 +257,12 @@ async def del_acc_cmd(client, message):
     if not user_clients:
         await message.reply_text("❌ هیچ اکانتی برای حذف وجود ندارد.")
         return
-
-    buttons = []
-    for phone in user_clients.keys():
-        buttons.append([
-            InlineKeyboardButton(f"🗑 حذف {phone}", callback_data=f"del_{phone}")
-        ])
-
-    await message.reply_text(
-        "📋 **مدیریت اکانت‌ها:**\nروی اکانتی که می‌خواهید از ربات حذف شود کلیک کنید:",
-        reply_markup=InlineKeyboardMarkup(buttons),
-    )
+    buttons = [[InlineKeyboardButton(f"🗑 حذف {phone}", callback_data=f"del_{phone}")] for phone in user_clients.keys()]
+    await message.reply_text("📋 **مدیریت اکانت‌ها:**\nروی اکانتی که می‌خواهید حذف شود کلیک کنید:", reply_markup=InlineKeyboardMarkup(buttons))
 
 @bot.on_callback_query(filters.regex(r"^del_"))
 async def callback_del_acc(client, callback_query):
     phone = callback_query.data.replace("del_", "")
-
     try:
         if phone in pytgcalls_clients:
             try:
@@ -343,39 +270,28 @@ async def callback_del_acc(client, callback_query):
             except:
                 pass
             del pytgcalls_clients[phone]
-
         if phone in user_clients:
             try:
                 await user_clients[phone].stop()
             except:
                 pass
             del user_clients[phone]
-
         session_file = os.path.join(SESSIONS_DIR, f"{phone}.session")
         if os.path.exists(session_file):
             os.remove(session_file)
-
-        journal_file = os.path.join(SESSIONS_DIR, f"{phone}.session-journal")
-        if os.path.exists(journal_file):
-            os.remove(journal_file)
-
-        await callback_query.message.edit_text(
-            f"✅ اکانت `{phone}` با موفقیت حذف شد و فایل سشن آن پاک گردید."
-        )
+        await callback_query.message.edit_text(f"✅ اکانت `{phone}` با موفقیت حذف شد.")
     except Exception as e:
         await callback_query.answer(f"❌ خطا در حذف اکانت: {e}", show_alert=True)
 
-@bot.on_message(filters.command("reload") & owner_filter)
+@bot.on_message(filters.command("reload"))
 async def reload_accs(client, message):
     if not await check_subscription(client, message.from_user.id):
         return
     msg = await message.reply_text("⏳ در حال بازیابی سشن‌ها...")
     await load_saved_sessions()
-    await msg.edit_text(
-        f"✅ بازخوانی تکمیل شد. اکانت‌های آماده: {len(user_clients)}"
-    )
+    await msg.edit_text(f"✅ بازخوانی تکمیل شد. اکانت‌های آماده: {len(user_clients)}")
 
-@bot.on_message(filters.text & filters.private & owner_filter)
+@bot.on_message(filters.text & filters.private)
 async def handle_login(client, message):
     user_id = message.from_user.id
     if user_id not in user_login_steps:
@@ -443,7 +359,7 @@ async def handle_login(client, message):
             await message.reply_text(f"❌ خطا: {e}")
             del user_login_steps[user_id]
 
-@bot.on_message(filters.command("joinvc") & owner_filter)
+@bot.on_message(filters.command("joinvc"))
 async def join_vc(client, message):
     if not await check_subscription(client, message.from_user.id):
         return
@@ -458,7 +374,7 @@ async def join_vc(client, message):
         await message.reply_text("❌ هیچ اکانتی یافت نشد.")
         return
 
-    msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌‌چت...")
+    msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌چت...")
     joined = 0
     failed = 0
 
@@ -468,20 +384,16 @@ async def join_vc(client, message):
             chat_id = await resolve_and_join_chat(user_cli, target)
             await call_app.join_group_call(chat_id)
             joined += 1
-
             if joined % 5 == 0:
                 await msg.edit_text(f"⏳ در حال ورود... تا الان {joined} اکانت وارد شدند.")
-
             await asyncio.sleep(2)
         except Exception as e:
             logger.error(f"Error joining {phone}: {e}")
             failed += 1
 
-    await msg.edit_text(
-        f"✅ ورود دسته‌ای کامل شد!\n\n🔹 موفق: {joined}\n⚠️ ناموفق: {failed}"
-    )
+    await msg.edit_text(f"✅ ورود دسته‌ای کامل شد!\n\n🔹 موفق: {joined}\n⚠️ ناموفق: {failed}")
 
-@bot.on_message(filters.command("leavevc") & owner_filter)
+@bot.on_message(filters.command("leavevc"))
 async def leave_vc(client, message):
     if not await check_subscription(client, message.from_user.id):
         return
@@ -491,11 +403,8 @@ async def leave_vc(client, message):
             if hasattr(call_app, "active_calls"):
                 for call in call_app.active_calls:
                     await call_app.leave_group_call(call.chat_id)
-            else:
-                pass
         except Exception as e:
             logger.error(f"Error leaving {phone}: {e}")
-
     await msg.edit_text("✅ خروج اکانت‌ها انجام شد.")
 
 async def main():
