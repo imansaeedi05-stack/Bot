@@ -1,7 +1,7 @@
 import os
 import asyncio
 
-# اصلاح حیاتی پیش از هرگونه ایمپورت Pyrogram برای پایتون ۳.۱۴ در رندر
+# اصلاح حیاتی پیش از هرگونه ایمپورت Pyrogram برای پایتون در رندر
 try:
     asyncio.get_event_loop()
 except RuntimeError:
@@ -11,15 +11,7 @@ import re
 from pyrogram import Client, filters
 from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid
 from pytgcalls import PyTgCalls
-
-# ایمپورت ایمن و سازگار با نسخه‌های جدید pytgcalls
-try:
-    from pytgcalls.types.input_stream import AudioPiped
-except ImportError:
-    try:
-        from pytgcalls.types import AudioPiped
-    except ImportError:
-        AudioPiped = None
+from pytgcalls.types import AudioPiped
 
 BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
 API_ID = 38859635
@@ -31,22 +23,19 @@ SESSIONS_DIR = "sessions"
 if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
 
-user_clients = {}
 pytgcalls_clients = {}
-active_chats = {}
 user_steps = {}
-
 SILENT_AUDIO = "silent.wav"
 
 @bot.on_message(filters.command("start") & filters.private)
 async def start_cmd(client, message):
     await message.reply_text(
-        "🤖 **سیستم مدیریت اکانت‌ها و ویس‌کال**\n\n"
+        "🤖 **سیستم مدیریت اکانت‌ها و ویس‌کال (نسخه py-tgcalls v2)**\n\n"
         "دستورات موجود:\n"
         "➕ `/add` - افزودن اکانت جدید (شماره، کد، رمز)\n"
         "📋 `/list` - لیست اکانت‌های فعال\n"
         "🎧 `/join آیدی_گروه` - ورود تمام اکانت‌ها به ویس‌کال\n"
-        "🚪 `/leave` - خروج تمام اکانت‌ها از ویس‌‌کال"
+        "🚪 `/leave` - خروج تمام اکانت‌ها از ویس‌کال"
     )
 
 @bot.on_message(filters.command("add") & filters.private)
@@ -92,21 +81,20 @@ async def join_vc_cmd(client, message):
         try:
             user_cli = Client(session_path, api_id=API_ID, api_hash=API_HASH)
             await user_cli.start()
-            user_clients[phone] = user_cli
 
             chat = await user_cli.join_chat(target)
             chat_id = chat.id
 
+            # ساخت و راه‌اندازی کلاینت ویس برای py-tgcalls v2
             call_client = PyTgCalls(user_cli)
             await call_client.start()
             pytgcalls_clients[phone] = call_client
 
-            if AudioPiped and os.path.exists(SILENT_AUDIO):
-                await call_client.join_group_call(chat_id, AudioPiped(SILENT_AUDIO))
+            if os.path.exists(SILENT_AUDIO):
+                await call_client.join(chat_id, AudioPiped(SILENT_AUDIO))
             else:
-                await call_client.join_group_call(chat_id)
+                await call_client.join(chat_id)
 
-            active_chats[phone] = chat_id
             success += 1
             await asyncio.sleep(3)
         except Exception as e:
@@ -123,12 +111,11 @@ async def leave_vc_cmd(client, message):
     left_count = 0
     for phone, call_client in pytgcalls_clients.items():
         try:
-            await call_client.leave_group_call()
+            await call_client.leave()
             left_count += 1
         except Exception:
             pass
     pytgcalls_clients.clear()
-    active_chats.clear()
     await status_msg.edit_text(f"✅ {left_count} اکانت با موفقیت از ویس خارج شدند.")
 
 @bot.on_message(filters.text & filters.private)
