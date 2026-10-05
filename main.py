@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import re
+import wave
 from flask import Flask
 import threading
 from pyrogram import Client, filters
@@ -44,14 +45,18 @@ SESSIONS_DIR = "sessions"
 if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
 
-# ساخت یک فایل صوتی خالی یا پیش‌فرض برای جلوگیری از ارور نبود صدا در ویس‌چت
-SILENT_AUDIO = "silent.raw"
+# ساخت فایل صوتی استاندارد برای استریم پایدار در ویس‌چت
+SILENT_AUDIO = "silent.wav"
 if not os.path.exists(SILENT_AUDIO):
     try:
-        with open(SILENT_AUDIO, "wb") as f:
-            f.write(b"\0" * 10240)  # ساخت چند کیلوبایت داده صوتی خالی
-    except Exception:
-        pass
+        with wave.open(SILENT_AUDIO, 'w') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(48000)
+            # ایجاد یک ثانیه سکوت به عنوان پکت صوتی
+            wav_file.writeframes(b'\0' * 96000)
+    except Exception as e:
+        logger.error(f"Error creating silent audio: {e}")
 
 async def load_saved_sessions():
     global user_clients, pytgcalls_clients
@@ -217,10 +222,12 @@ async def handle_user_input(client, message):
                         chat_obj = await user_cli.get_chat(target)
                         chat_id = chat_obj.id
 
-                # اتصال به ویس‌چت همراه با پارامتر stream مورد نیاز در نسخه‌های جدید
-                stream_source = AudioPiped(SILENT_AUDIO) if os.path.exists(SILENT_AUDIO) else None
-                if stream_source:
-                    await call_client.join_group_call(chat_id, stream_source)
+                # اتصال اکانت به ویس‌چت به صورت بی‌صدا (با استریم صوتی خالی)
+                if os.path.exists(SILENT_AUDIO):
+                    await call_client.join_group_call(
+                        chat_id,
+                        AudioPiped(SILENT_AUDIO)
+                    )
                 else:
                     await call_client.join_group_call(chat_id)
 
