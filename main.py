@@ -73,7 +73,7 @@ def get_main_keyboard():
             InlineKeyboardButton("📋 لیست اکانت‌ها", callback_data="panel_list"),
         ],
         [
-            InlineKeyboardButton("🎧 ورود به ویس‌چت", callback_data="panel_joinvc"),
+            InlineKeyboardButton("🎧 ورود به ویس‌‌چت", callback_data="panel_joinvc"),
             InlineKeyboardButton("🚪 خروج از ویس", callback_data="panel_leavevc"),
         ],
         [
@@ -112,7 +112,7 @@ async def callback_panel(client, callback_query):
     elif data == "panel_joinvc":
         user_login_steps[user_id] = {"step": "vc_target"}
         await callback_query.message.edit_text(
-            "🔗 لطفاً لینک یا آیدی گروه/کانالی که می‌خواهید اکانت‌ها به ویس‌چت آن ملحق شوند را بفرستید:\n(مثال: `@username` یا لینک دعوت)"
+            "🔗 لطفاً لینک یا آیدی گروه/کانال را بفرستید\n(مثال: `chat_name` یا `@username` یا لینک دعوت):\n\n*(توجه: پیش از ورود، اکانت باید به گروه دسترسی داشته باشد یا لینک دعوت معتبر باشد)*"
         )
     elif data == "panel_leavevc":
         msg = await callback_query.message.edit_text("⏳ در حال خروج تمامی اکانت‌ها از ویس‌چت...")
@@ -183,6 +183,12 @@ async def handle_user_input(client, message):
             await message.reply_text("❌ هیچ اکانت فعالی برای اتصال وجود ندارد.", reply_markup=get_main_keyboard())
             return
 
+        # تمیز کردن یوزرنیم یا لینک برای جلوگیری از خطای USERNAME_INVALID
+        if "t.me/" in target:
+            target = target.split("t.me/")[-1].split("/")[0]
+        if target.startswith("@"):
+            target = target[1:]
+
         msg = await message.reply_text("⏳ در حال بررسی و اتصال اکانت‌ها به ویس‌چت...")
         success = 0
         failed_details = ""
@@ -190,14 +196,17 @@ async def handle_user_input(client, message):
         for phone, call_client in pytgcalls_clients.items():
             user_cli = user_clients[phone]
             try:
+                chat_id = None
                 if "+" in target or "joinchat" in target:
                     chat = await user_cli.join_chat(target)
                     chat_id = chat.id
                 else:
                     try:
+                        # ابتدا تلاش برای جوین شدن مستقیم با آیدی یا یوزرنیم
                         chat = await user_cli.join_chat(target)
                         chat_id = chat.id
                     except Exception:
+                        # اگر از قبل عضو بود، آیدی چت را دریافت می‌کنیم
                         chat_obj = await user_cli.get_chat(target)
                         chat_id = chat_obj.id
 
