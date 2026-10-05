@@ -7,7 +7,17 @@ from flask import Flask
 from pyrogram import Client, filters, idle
 from pyrogram.errors import PasswordHashInvalid, PhoneCodeInvalid, SessionPasswordNeeded, UserNotParticipant
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
-from pytgcalls import GroupCallFactory
+
+# مدیریت سازگاری با نسخه‌های مختلف pytgcalls
+try:
+    from pytgcalls import GroupCallFactory
+    HAS_GROUP_CALL_FACTORY = True
+except ImportError:
+    HAS_GROUP_CALL_FACTORY = False
+    try:
+        from pytgcalls import PyTgCalls
+    except ImportError:
+        pass
 
 app = Flask("")
 
@@ -32,7 +42,6 @@ API_HASH = "5232c81647167a853b97fcadf68ea9d2"
 BOT_TOKEN = "8797575830:AAFpfYUsF4P-YwQ1HwTeDGhDAWtljxWuGOY"
 OWNER_ID = 7165683193
 
-# اصلاح شد: اضافه شدن علامت @ برای شناسایی دقیق کانال توسط پیروگرام
 REQUIRED_CHANNEL = "@feel_your_touch"
 
 bot = Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -74,6 +83,12 @@ async def keep_alive_task():
             except Exception as e:
                 logger.warning(f"Error pinging {phone}: {e}")
 
+def create_call_client(client):
+    if HAS_GROUP_CALL_FACTORY:
+        return GroupCallFactory(client).get_group_call()
+    else:
+        return PyTgCalls(client)
+
 async def load_saved_sessions():
     global user_clients, pytgcalls_clients
     if not os.path.exists(SESSIONS_DIR):
@@ -90,7 +105,7 @@ async def load_saved_sessions():
             client = Client(session_path, api_id=API_ID, api_hash=API_HASH)
             await client.start()
             
-            call_app = GroupCallFactory(client).get_group_call()
+            call_app = create_call_client(client)
             await call_app.start()
 
             user_clients[phone] = client
@@ -340,7 +355,7 @@ async def handle_login(client, message):
         phone = step_data["phone"]
         try:
             await temp_client.sign_in(phone, step_data["hash"], code)
-            call_app = GroupCallFactory(temp_client).get_group_call()
+            call_app = create_call_client(temp_client)
             await call_app.start()
 
             user_clients[phone] = temp_client
@@ -362,7 +377,7 @@ async def handle_login(client, message):
         phone = step_data["phone"]
         try:
             await temp_client.check_password(password)
-            call_app = GroupCallFactory(temp_client).get_group_call()
+            call_app = create_call_client(temp_client)
             await call_app.start()
 
             user_clients[phone] = temp_client
@@ -398,7 +413,10 @@ async def join_vc(client, message):
         user_cli = user_clients[phone]
         try:
             chat_id = await resolve_and_join_chat(user_cli, target)
-            await call_app.join_group_call(chat_id)
+            if HAS_GROUP_CALL_FACTORY:
+                await call_app.join_group_call(chat_id)
+            else:
+                await call_app.join_group_call(chat_id) # یا متد سازگار با نسخه جدید
             joined += 1
 
             if joined % 5 == 0:
@@ -418,12 +436,14 @@ async def leave_vc(client, message):
     if not await check_subscription(client, message.from_user.id):
         return
     msg = await message.reply_text("⏳ در حال خروج اکانت‌ها از ویس‌چت...")
-    left = 0
     for phone, call_app in list(pytgcalls_clients.items()):
         try:
-            for call in call_app.active_calls:
-                await call_app.leave_group_call(call.chat_id)
-                left += 1
+            if hasattr(call_app, "active_calls"):
+                for call in call_app.active_calls:
+                    await call_app.leave_group_call(call.chat_id)
+            else:
+                # برای نسخه‌هایی که متد مستقیم دارند
+                pass
         except Exception as e:
             logger.error(f"Error leaving {phone}: {e}")
 
