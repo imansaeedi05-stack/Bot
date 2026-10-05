@@ -7,9 +7,9 @@ import telebot
 # اطلاعات حساب و ربات شما
 API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
-BOT_TOKEN = "8610788849:AAFu-oLDMAyFNUYN8RRi6oRM7XeHJ58q-Fs"
+BOT_TOKEN = "8797575830:AAFpfYUsF4P-YwQ1HwTeDGhDAWtljxWuGOY"
 
-# راه‌‌‌‌اندازی ربات با telebot برای پاسخگویی سریع و تضمینی به دستورات و دکمه‌ها
+# راه‌اندازی ربات با telebot برای پاسخگویی سریع و تضمینی به دستورات و دکمه‌ها
 bot = telebot.TeleBot(BOT_TOKEN)
 
 
@@ -29,19 +29,12 @@ def send_welcome(message):
 
 
 def run_bot():
-  # اجرای لوپ ربات تلگرام به صورت ایمن و بدون توقف
+  # پاکسازی صف انتظار و اجرای پولینگ بدون تداخل
+  try:
+    bot.remove_webhook()
+  except:
+    pass
   bot.infinity_polling(skip_pending=True)
-
-
-# راه‌اندازی پیروگرام برای کارهای مرتبط با اکانت‌ها و ویس‌چت
-app = Client(
-    "bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN
-)
-
-
-@app.on_message(filters.command("ping"))
-async def ping_handler(client, message):
-  await message.reply("پیروگرام هم آنلاین و متصل است!")
 
 
 # راه‌اندازی یک سرور وب ساده با فلاسک برای ماندن در دسترس روی رندر (پورت 10000)
@@ -64,12 +57,7 @@ if __name__ == "__main__":
   t_flask.daemon = True
   t_flask.start()
 
-  # اجرای ترد ربات تلگرام برای پاسخگویی به استارت
-  t_bot = threading.Thread(target=run_bot)
-  t_bot.daemon = True
-  t_bot.start()
+  print("سرویس وب (Flask) و ربات استارت شدند...")
 
-  print("تمامی سرویس‌ها با موفقیت استارت شدند...")
-
-  # اجرای پیروگرام به عنوان فرآیند اصلی نگهدارنده برنامه
-  app.run()
+  # اجرای لوپ اصلی ربات تلگرام
+  run_bot()
