@@ -16,18 +16,25 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid, PasswordHashInvalid
 
-# ایمپورت ایمن و سازگار با نسخه‌های مختلف py-tgcalls
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ایمپورت همراه با چاپ خطای دقیق برای عیب‌یابی
 PYTGCALLS_AVAILABLE = False
 try:
     from pytgcalls import PyTgCalls
     from pytgcalls.types import AudioPiped
     PYTGCALLS_AVAILABLE = True
-except Exception:
+    logger.info("--> PyTgCalls loaded successfully with AudioPiped!")
+except Exception as e1:
+    logger.error(f"--> Method 1 failed: {e1}")
     try:
         from pytgcalls import PyTgCalls
         from pytgcalls.types.input_stream import AudioPiped
         PYTGCALLS_AVAILABLE = True
-    except Exception:
+        logger.info("--> PyTgCalls loaded successfully with input_stream!")
+    except Exception as e2:
+        logger.error(f"--> Method 2 failed: {e2}")
         PYTGCALLS_AVAILABLE = False
 
 app = Flask("")
@@ -41,9 +48,6 @@ def run_flask():
     app.run(host="0.0.0.0", port=port)
 
 threading.Thread(target=run_flask, daemon=True).start()
-
-logging.basicConfig(level=logging.ERROR)
-logger = logging.getLogger(__name__)
 
 BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
 API_ID = 38859635
@@ -91,12 +95,12 @@ async def load_saved_sessions():
                 call_client = PyTgCalls(client)
                 await call_client.start()
                 pytgcalls_clients[phone] = call_client
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Error loading session {phone}: {e}")
 
 async def stability_background_loop():
     while True:
-        await asyncio.sleep(180) # بررسی پایداری استریم هر ۳ دقیقه
+        await asyncio.sleep(180)
         for phone, chat_id in list(active_chats.items()):
             call_client = pytgcalls_clients.get(phone)
             user_cli = user_clients.get(phone)
@@ -274,8 +278,8 @@ async def handle_user_input(client, message):
                     success += 1
                 
                 await asyncio.sleep(4)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Error joining call for {phone}: {e}")
 
         await msg.edit_text(f"📊 **نتیجه اتصال پایدار:**\n\n✅ {success} اکانت با موفقیت متصل شدند و در حالت ماندگار قرار گرفتند.", reply_markup=get_main_keyboard())
         return
