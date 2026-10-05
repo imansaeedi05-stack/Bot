@@ -39,6 +39,7 @@ bot = Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKE
 
 user_clients = {}
 pytgcalls_clients = {}
+active_chats = {}  # دیکشنری برای ذخیره چت آیدی هر اکانت جهت خروج دقیق
 user_login_steps = {}
 
 SESSIONS_DIR = "sessions"
@@ -130,12 +131,22 @@ async def callback_panel(client, callback_query):
     elif data == "panel_leavevc":
         await callback_query.message.edit_text("⏳ در حال خروج تمامی اکانت‌ها از ویس‌چت...")
         success_leave = 0
+        
         for phone, call_client in pytgcalls_clients.items():
             try:
-                await call_client.leave_group_call()
+                # خروج با استفاده از چت آیدی ذخیره شده
+                chat_id = active_chats.get(phone)
+                if chat_id:
+                    await call_client.leave_group_call(chat_id)
+                else:
+                    # اگر ذخیره نشده بود، تلاش برای خروج مستقیم عمومی
+                    await call_client.leave_group_call()
+                
+                active_chats.pop(phone, None)
                 success_leave += 1
             except Exception as e:
                 logger.error(f"Leave error for {phone}: {e}")
+
         await callback_query.message.edit_text(f"✅ خروج انجام شد. اکانت‌های خارج‌شده: {success_leave}", reply_markup=get_main_keyboard())
     elif data == "panel_del":
         await load_saved_sessions()
@@ -167,6 +178,7 @@ async def callback_del_acc(client, callback_query):
         if phone in user_clients:
             await user_clients[phone].stop()
             del user_clients[phone]
+        active_chats.pop(phone, None)
 
         session_file = os.path.join(SESSIONS_DIR, f"{phone}.session")
         if os.path.exists(session_file):
@@ -239,6 +251,9 @@ async def handle_user_input(client, message):
                             call_client.join_group_call(chat_id),
                             timeout=10
                         )
+                    
+                    # ذخیره چت آیدی برای خروج موفق
+                    active_chats[phone] = chat_id
                     success += 1
                 else:
                     raise Exception("Could not resolve chat_id")
@@ -250,7 +265,7 @@ async def handle_user_input(client, message):
 
         result_text = f"📊 **گزارش اتصال به ویس‌چت:**\n\n✅ اتصال موفق: {success} اکانت"
         if failed_details:
-            result_text += f"\n\n⚠️️ **اکانت‌های ناموفق و دلیل خطا:**{failed_details}"
+            result_text += f"\n\n⚠️ **اکانت‌های ناموفق و دلیل خطا:**{failed_details}"
 
         await msg.edit_text(result_text, reply_markup=get_main_keyboard())
         return
