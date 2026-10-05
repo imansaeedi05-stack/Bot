@@ -10,6 +10,7 @@ from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid, PasswordHas
 
 try:
     from pytgcalls import PyTgCalls
+    from pytgcalls.types import AudioPiped
     PYTGCALLS_AVAILABLE = True
 except Exception:
     PYTGCALLS_AVAILABLE = False
@@ -43,6 +44,15 @@ SESSIONS_DIR = "sessions"
 if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
 
+# ساخت یک فایل صوتی خالی یا پیش‌فرض برای جلوگیری از ارور نبود صدا در ویس‌چت
+SILENT_AUDIO = "silent.raw"
+if not os.path.exists(SILENT_AUDIO):
+    try:
+        with open(SILENT_AUDIO, "wb") as f:
+            f.write(b"\0" * 10240)  # ساخت چند کیلوبایت داده صوتی خالی
+    except Exception:
+        pass
+
 async def load_saved_sessions():
     global user_clients, pytgcalls_clients
     if not os.path.exists(SESSIONS_DIR):
@@ -73,7 +83,7 @@ def get_main_keyboard():
             InlineKeyboardButton("📋 لیست اکانت‌ها", callback_data="panel_list"),
         ],
         [
-            InlineKeyboardButton("🎧 ورود به ویس‌‌چت", callback_data="panel_joinvc"),
+            InlineKeyboardButton("🎧 ورود به ویس‌چت", callback_data="panel_joinvc"),
             InlineKeyboardButton("🚪 خروج از ویس", callback_data="panel_leavevc"),
         ],
         [
@@ -112,7 +122,7 @@ async def callback_panel(client, callback_query):
     elif data == "panel_joinvc":
         user_login_steps[user_id] = {"step": "vc_target"}
         await callback_query.message.edit_text(
-            "🔗 لطفاً لینک یا آیدی گروه/کانال را بفرستید\n(مثال: `chat_name` یا `@username` یا لینک دعوت):\n\n*(توجه: پیش از ورود، اکانت باید به گروه دسترسی داشته باشد یا لینک دعوت معتبر باشد)*"
+            "🔗 لطفاً لینک یا آیدی گروه/کانال را بفرستید\n(مثال: `chat_name` یا `@username` یا لینک دعوت):\n\n*(توجه: پیش از ورود، اکانت باید به گروه دسترسی داشته باشد)*"
         )
     elif data == "panel_leavevc":
         msg = await callback_query.message.edit_text("⏳ در حال خروج تمامی اکانت‌ها از ویس‌چت...")
@@ -183,7 +193,6 @@ async def handle_user_input(client, message):
             await message.reply_text("❌ هیچ اکانت فعالی برای اتصال وجود ندارد.", reply_markup=get_main_keyboard())
             return
 
-        # تمیز کردن یوزرنیم یا لینک برای جلوگیری از خطای USERNAME_INVALID
         if "t.me/" in target:
             target = target.split("t.me/")[-1].split("/")[0]
         if target.startswith("@"):
@@ -202,15 +211,19 @@ async def handle_user_input(client, message):
                     chat_id = chat.id
                 else:
                     try:
-                        # ابتدا تلاش برای جوین شدن مستقیم با آیدی یا یوزرنیم
                         chat = await user_cli.join_chat(target)
                         chat_id = chat.id
                     except Exception:
-                        # اگر از قبل عضو بود، آیدی چت را دریافت می‌کنیم
                         chat_obj = await user_cli.get_chat(target)
                         chat_id = chat_obj.id
 
-                await call_client.join_group_call(chat_id)
+                # اتصال به ویس‌چت همراه با پارامتر stream مورد نیاز در نسخه‌های جدید
+                stream_source = AudioPiped(SILENT_AUDIO) if os.path.exists(SILENT_AUDIO) else None
+                if stream_source:
+                    await call_client.join_group_call(chat_id, stream_source)
+                else:
+                    await call_client.join_group_call(chat_id)
+
                 success += 1
             except Exception as e:
                 error_msg = str(e)
