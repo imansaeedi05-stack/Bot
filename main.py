@@ -11,7 +11,15 @@ import re
 from pyrogram import Client, filters
 from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid
 from pytgcalls import PyTgCalls
-from pytgcalls.types import AudioPiped
+
+# ایمپورت ایمن و سازگار با نسخه‌های جدید pytgcalls
+try:
+    from pytgcalls.types.input_stream import AudioPiped
+except ImportError:
+    try:
+        from pytgcalls.types import AudioPiped
+    except ImportError:
+        AudioPiped = None
 
 BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
 API_ID = 38859635
@@ -38,7 +46,7 @@ async def start_cmd(client, message):
         "➕ `/add` - افزودن اکانت جدید (شماره، کد، رمز)\n"
         "📋 `/list` - لیست اکانت‌های فعال\n"
         "🎧 `/join آیدی_گروه` - ورود تمام اکانت‌ها به ویس‌کال\n"
-        "🚪 `/leave` - خروج تمام اکانت‌ها از ویس‌کال"
+        "🚪 `/leave` - خروج تمام اکانت‌ها از ویس‌‌کال"
     )
 
 @bot.on_message(filters.command("add") & filters.private)
@@ -93,7 +101,7 @@ async def join_vc_cmd(client, message):
             await call_client.start()
             pytgcalls_clients[phone] = call_client
 
-            if os.path.exists(SILENT_AUDIO):
+            if AudioPiped and os.path.exists(SILENT_AUDIO):
                 await call_client.join_group_call(chat_id, AudioPiped(SILENT_AUDIO))
             else:
                 await call_client.join_group_call(chat_id)
