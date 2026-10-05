@@ -38,11 +38,11 @@ logger = logging.getLogger(__name__)
 
 API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
-BOT_TOKEN = "8797575830:AAFpfYUsF4P-YwQ1HwTeDGhDAWtljxWuGOY"
+BOT_TOKEN = "8713081155:AAE0SPxswRAW3y2TK98HM65D4c9Hc7ipMzs"
 OWNER_ID = 7165683193
 
-# کانال دقیق و اختصاصی شما برای اجبار به عضویت
 REQUIRED_CHANNEL = "@feel_your_touch"
+REQUIRED_CHANNEL_URL = "https://t.me/feel_your_touch"
 
 bot = Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -62,14 +62,25 @@ if not os.path.exists(SESSIONS_DIR):
 async def check_subscription(client, user_id):
     if user_id == OWNER_ID:
         return True
+
     try:
-        await client.get_chat_member(REQUIRED_CHANNEL, user_id)
-        return True
+        member = await client.get_chat_member(
+            REQUIRED_CHANNEL,
+            user_id
+        )
+
+        return member.status in (
+            "member",
+            "administrator",
+            "owner"
+        )
+
     except UserNotParticipant:
         return False
+
     except Exception as e:
         logger.error(f"Error checking subscription: {e}")
-        return True
+        return False
 
 async def keep_alive_task():
     while True:
@@ -138,62 +149,104 @@ async def resolve_and_join_chat(user_client: Client, target: str) -> int:
         chat = await user_client.join_chat(target)
         return chat.id
 
-@bot.on_message(filters.command("start") & owner_filter)
+@bot.on_message(filters.command("start"))
 async def start_cmd(client, message):
-    is_joined = await check_subscription(client, message.from_user.id)
-    if not is_joined:
+    user_id = message.from_user.id
+
+    if not await check_subscription(client, user_id):
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📢 ورود به کانال", url="https://t.me/feel_your_touch")],
-            [InlineKeyboardButton("🔄 بررسی مجدد عضویت", callback_data="check_sub")]
+            [
+                InlineKeyboardButton(
+                    "📢 عضویت در کانال",
+                    url=REQUIRED_CHANNEL_URL
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔄 بررسی عضویت",
+                    callback_data="check_sub"
+                )
+            ]
         ])
+
         await message.reply_text(
-            "❌ برای استفاده از ربات، لطفاً ابتدا در کانال زیر عضو شوید و سپس روی دکمه‌ی بررسی مجدد کلیک کنید:",
+            "❌ برای استفاده از ربات ابتدا باید در کانال زیر عضو شوید:\n\n"
+            "📢 @feel_your_touch\n\n"
+            "بعد از عضویت روی «🔄 بررسی عضویت» بزنید.",
             reply_markup=keyboard
         )
         return
 
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("➕ افزودن اکانت", callback_data="menu_add"),
-            InlineKeyboardButton("📋 لیست اکانت‌ها", callback_data="menu_list"),
+            InlineKeyboardButton(
+                "➕ افزودن اکانت",
+                callback_data="menu_add"
+            ),
+            InlineKeyboardButton(
+                "📋 لیست اکانت‌ها",
+                callback_data="menu_list"
+            )
         ],
         [
-            InlineKeyboardButton("🗑 حذف اکانت", callback_data="menu_del"),
-            InlineKeyboardButton("🔄 بازخوانی سشن‌ها", callback_data="menu_reload"),
+            InlineKeyboardButton(
+                "🗑 حذف اکانت",
+                callback_data="menu_del"
+            ),
+            InlineKeyboardButton(
+                "🔄 بازخوانی سشن‌ها",
+                callback_data="menu_reload"
+            )
         ],
     ])
 
-    text = (
+    await message.reply_text(
         "🤖 **پنل مدیریت پیشرفته اکانت‌های ویس‌چت**\n\n"
-        "از دکمه‌های شیشه‌ای زیر برای مدیریت سریع ربات استفاده کنید:"
+        "از دکمه‌های شیشه‌ای زیر برای مدیریت سریع ربات استفاده کنید:",
+        reply_markup=keyboard
     )
-    await message.reply_text(text, reply_markup=keyboard)
 
 @bot.on_callback_query(filters.regex(r"^check_sub$"))
 async def callback_check_sub(client, callback_query):
     user_id = callback_query.from_user.id
-    is_joined = await check_subscription(client, user_id)
-    if not is_joined:
-        await callback_query.answer("❌ شما هنوز در کانال عضو نشده‌اید!", show_alert=True)
+
+    if not await check_subscription(client, user_id):
+        await callback_query.answer(
+            "❌ هنوز در کانال عضو نشده‌اید.",
+            show_alert=True
+        )
         return
 
     await callback_query.message.delete()
+
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("➕ افزودن اکانت", callback_data="menu_add"),
-            InlineKeyboardButton("📋 لیست اکانت‌ها", callback_data="menu_list"),
+            InlineKeyboardButton(
+                "➕ افزودن اکانت",
+                callback_data="menu_add"
+            ),
+            InlineKeyboardButton(
+                "📋 لیست اکانت‌ها",
+                callback_data="menu_list"
+            )
         ],
         [
-            InlineKeyboardButton("🗑 حذف اکانت", callback_data="menu_del"),
-            InlineKeyboardButton("🔄 بازخوانی سشن‌ها", callback_data="menu_reload"),
+            InlineKeyboardButton(
+                "🗑 حذف اکانت",
+                callback_data="menu_del"
+            ),
+            InlineKeyboardButton(
+                "🔄 بازخوانی سشن‌ها",
+                callback_data="menu_reload"
+            )
         ],
     ])
-    text = (
-        "✅ عضویت شما تایید شد!\n\n"
-        "🤖 **پنل مدیریت پیشرفته اکانت‌های ویس‌چت**\n\n"
-        "از دکمه‌های شیشه‌ای زیر برای مدیریت سریع ربات استفاده کنید:"
+
+    await callback_query.message.reply_text(
+        "✅ عضویت شما تأیید شد!\n\n"
+        "🤖 **پنل مدیریت پیشرفته اکانت‌های ویس‌چت**",
+        reply_markup=keyboard
     )
-    await callback_query.message.reply_text(text, reply_markup=keyboard)
 
 @bot.on_callback_query(filters.regex(r"^menu_"))
 async def callback_menu(client, callback_query):
@@ -405,7 +458,7 @@ async def join_vc(client, message):
         await message.reply_text("❌ هیچ اکانتی یافت نشد.")
         return
 
-    msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌چت...")
+    msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌‌چت...")
     joined = 0
     failed = 0
 
