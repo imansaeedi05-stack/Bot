@@ -16,9 +16,8 @@ def home():
     return "Bot is Alive!"
 
 def run_flask():
- port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-
 
 threading.Thread(target=run_flask, daemon=True).start()
 
@@ -52,7 +51,6 @@ if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
 
 async def check_subscription(client, user_id):
-    # برای مالک ربات اجباری نباشد یا بررسی شود (اختیاری: مالک همیشه رد شود)
     if user_id == OWNER_ID:
         return True
     try:
@@ -62,7 +60,7 @@ async def check_subscription(client, user_id):
         return False
     except Exception as e:
         logger.error(f"Error checking subscription: {e}")
-        return True # اگر خطایی رخ داد برای اینکه کاربر معطل نشود اجازه عبور بدهیم یا بررسی کنیم
+        return True
 
 async def keep_alive_task():
     while True:
@@ -127,7 +125,6 @@ async def resolve_and_join_chat(user_client: Client, target: str) -> int:
 
 @bot.on_message(filters.command("start") & owner_filter)
 async def start_cmd(client, message):
-    # بررسی عضویت در کانال
     is_joined = await check_subscription(client, message.from_user.id)
     if not is_joined:
         keyboard = InlineKeyboardMarkup([
