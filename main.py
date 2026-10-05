@@ -26,13 +26,13 @@ logger = logging.getLogger(__name__)
 
 API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
-BOT_TOKEN = "8713081155:AAE0SPxswRAW3y2TK98HM65D4c9Hc7ipMzs"
+BOT_TOKEN = "8370573441:AAH0-d7dXkUiigYqLOp0_0M-3jAxtCJjFf0"
 OWNER_ID = 7165683193
 
-# استفاده از نام متمرکز و مستقل برای سشن ربات
+# استفاده از توکن و نام جدید
 bot = Client("bot_main_instance", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# این بخش تمام پیام‌های ورودی را در لاگ رندر ثبت می‌کند تا ببینیم آیا پیامی دریافت می‌شود یا خیر
+# این بخش تمام پیام‌های ورودی را در لاگ رندر ثبت می‌کند تا از ارتباط مطمئن شویم
 @bot.on_message(group=-1)
 async def debug_all_messages(client, message: Message):
     user_id = message.from_user.id if message.from_user else "Unknown"
