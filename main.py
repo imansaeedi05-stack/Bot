@@ -1,15 +1,15 @@
 import os
 import logging
 import asyncio
+import re
 from flask import Flask
 import threading
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid, PasswordHashInvalid
 
-# ایمپورت ایمن برای جلوگیری از کرش کردن ربات
 try:
     from pytgcalls import PyTgCalls
-    from pytgcalls.types.input_stream import InputStream
     PYTGCALLS_AVAILABLE = True
 except Exception:
     PYTGCALLS_AVAILABLE = False
@@ -37,6 +37,8 @@ bot = Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKE
 
 user_clients = {}
 pytgcalls_clients = {}
+user_login_steps = {}
+
 SESSIONS_DIR = "sessions"
 if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
@@ -80,15 +82,20 @@ async def start_cmd(client, message):
 
     await message.reply_text(
         "🤖 **پنل مدیریت اکانت‌ها و ویس‌چت**\n\n"
-        "ربات به صورت کامل متصل است. از دستور `/joinvc لینک_گروه` برای ورود به ویس استفاده کنید.",
+        "برای شروع از دکمه‌های زیر یا دستور `/joinvc` استفاده کنید.",
         reply_markup=keyboard
     )
 
 @bot.on_callback_query(filters.regex(r"^menu_"))
 async def callback_menu(client, callback_query):
+    user_id = callback_query.from_user.id
     data = callback_query.data
+
     if data == "menu_add":
-        await callback_query.message.edit_text("📱 بخش افزودن اکانت آماده است.")
+        user_login_steps[user_id] = {"step": "phone"}
+        await callback_query.message.edit_text(
+            "📱 لطفاً شماره تلفن اکانت خود را با کد کشور بفرستید:\n(مثال: `+989123456789`)"
+        )
     elif data == "menu_list":
         await load_saved_sessions()
         if not user_clients:
@@ -99,15 +106,116 @@ async def callback_menu(client, callback_query):
             text += f"👤 `{phone}`\n"
         await callback_query.message.edit_text(text)
     elif data == "menu_del":
-        await callback_query.answer("❌ اکانتی برای حذف وجود ندارد.", show_alert=True)
+        await load_saved_sessions()
+        if not user_clients:
+            await callback_query.answer("❌ هیچ اکانتی برای حذف وجود ندارد.", show_alert=True)
+            return
+        buttons = [[InlineKeyboardButton(f"🗑 حذف {phone}", callback_data=f"del_{phone}")] for phone in user_clients.keys()]
+        await callback_query.message.edit_text(
+            "🗑 اکانت مورد نظر برای حذف را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
     elif data == "menu_reload":
         await load_saved_sessions()
         await callback_query.answer(f"✅ بازخوانی شد. اکانت‌ها: {len(user_clients)}", show_alert=True)
 
+@bot.on_callback_query(filters.regex(r"^del_"))
+async def callback_del_acc(client, callback_query):
+    phone = callback_query.data.replace("del_", "")
+    try:
+        if phone in pytgcalls_clients:
+            await pytgcalls_clients[phone].stop()
+            del pytgcalls_clients[phone]
+        if phone in user_clients:
+            await user_clients[phone].stop()
+            del user_clients[phone]
+
+        session_file = os.path.join(SESSIONS_DIR, f"{phone}.session")
+        if os.path.exists(session_file):
+            os.remove(session_file)
+
+        await callback_query.message.edit_text(f"✅ اکانت `{phone}` با موفقیت حذف شد.")
+    except Exception as e:
+        await callback_query.answer(f"❌ خطا در حذف اکانت: {e}", show_alert=True)
+
+# مدیریت مراحل لاگین کاربر (دریافت شماره، کد و رمز دوم)
+@bot.on_message(filters.text & filters.private)
+async def handle_login_process(client, message):
+    user_id = message.from_user.id
+    if user_id not in user_login_steps:
+        return
+
+    step_data = user_login_steps[user_id]
+    step = step_data.get("step")
+
+    if step == "phone":
+        phone = re.sub(r"\s+", "", message.text.strip())
+        session_path = os.path.join(SESSIONS_DIR, phone)
+        temp_client = Client(session_path, api_id=API_ID, api_hash=API_HASH)
+        await temp_client.connect()
+        try:
+            sent_code = await temp_client.send_code(phone)
+            step_data.update({
+                "step": "code",
+                "phone": phone,
+                "client": temp_client,
+                "hash": sent_code.phone_code_hash,
+            })
+            await message.reply_text("📩 کد تلگرام ارسال شده را بفرستید (مثال: `12345`):")
+        except Exception as e:
+            await message.reply_text(f"❌ خطا در ارسال کد: {e}")
+            del user_login_steps[user_id]
+
+    elif step == "code":
+        code = message.text.strip()
+        temp_client = step_data["client"]
+        phone = step_data["phone"]
+        try:
+            await temp_client.sign_in(phone, step_data["hash"], code)
+            
+            # اگر ورود موفق بود
+            if PYTGCALLS_AVAILABLE:
+                call_client = PyTgCalls(temp_client)
+                await call_client.start()
+                pytgcalls_clients[phone] = call_client
+
+            user_clients[phone] = temp_client
+            del user_login_steps[user_id]
+            await message.reply_text(f"✅ اکانت `{phone}` با موفقیت اضافه و ذخیره شد!")
+        except SessionPasswordNeeded:
+            step_data["step"] = "password"
+            await message.reply_text("🔑 این اکانت دارای رمز دوم (تایید دو مرحله‌ای) است. لطفاً رمز عبور را وارد کنید:")
+        except PhoneCodeInvalid:
+            await message.reply_text("❌ کد وارد شده اشتباه است. لطفاً دوباره کد را بفرستید:")
+        except Exception as e:
+            await message.reply_text(f"❌ خطا: {e}")
+            del user_login_steps[user_id]
+
+    elif step == "password":
+        password = message.text.strip()
+        temp_client = step_data["client"]
+        phone = step_data["phone"]
+        try:
+            await temp_client.check_password(password)
+            
+            if PYTGCALLS_AVAILABLE:
+                call_client = PyTgCalls(temp_client)
+                await call_client.start()
+                pytgcalls_clients[phone] = call_client
+
+            user_clients[phone] = temp_client
+            del user_login_steps[user_id]
+            await message.reply_text(f"✅ رمز تایید شد و اکانت `{phone}` با موفقیت ذخیره شد!")
+        except PasswordHashInvalid:
+            await message.reply_text("❌ رمز عبور اشتباه است. لطفاً دوباره رمز را بفرستید:")
+        except Exception as e:
+            await message.reply_text(f"❌ خطا: {e}")
+            del user_login_steps[user_id]
+
 @bot.on_message(filters.command("joinvc"))
 async def join_vc(client, message):
     if not PYTGCALLS_AVAILABLE:
-        await message.reply_text("❌ پکیج `py-tgcalls` روی سرور نصب نیست یا نسخه آن هماهنگ نیست.")
+        await message.reply_text("❌ پکیج ویس‌چت فعال نیست.")
         return
 
     if len(message.command) < 2:
@@ -141,7 +249,7 @@ async def leave_vc(client, message):
     if not PYTGCALLS_AVAILABLE:
         return
     
-    msg = await message.reply_text("⏳ در حال خروج از ویس‌‌چت...")
+    msg = await message.reply_text("⏳ در حال خروج از ویس‌‌‌‌چت...")
     for phone, call_client in pytgcalls_clients.items():
         try:
             await call_client.leave_group_call()
