@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
-BOT_TOKEN = "8370573441:AAH0-d7dXkUiigYqLOp0_0M-3jAxtCJjFf0"
+BOT_TOKEN = "8797575830:AAFpfYUsF4P-YwQ1HwTeDGhDAWtljxWuGOY
 OWNER_ID = 7165683193
 
 # آیدی کانال شما برای اجبار به عضویت
