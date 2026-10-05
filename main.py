@@ -130,14 +130,29 @@ async def callback_panel(client, callback_query):
     elif data == "panel_leavevc":
         await callback_query.message.edit_text("⏳ در حال خروج تمامی اکانت‌ها از ویس‌چت...")
         success_leave = 0
+        
         for phone, call_client in pytgcalls_clients.items():
             try:
-                await call_client.leave_group_call()
+                # روش اول: استفاده از متد استاندارد خروج بدون پارامتر یا با بررسی فعال بودن کال
+                try:
+                    await call_client.leave_group_call()
+                    success_leave += 1
+                except Exception:
+                    # روش دوم: اگر اکانت در چتی حضور داشته باشد، از طریق کلاینتِ یوزر چک می‌کنیم و خارج می‌شویم
+                    user_cli = user_clients.get(phone)
+                    if user_cli:
+                        async for dialog in user_cli.get_dialogs(limit=20):
+                            if dialog.chat.type.value in ["group", "supergroup", "channel"]:
+                                try:
+                                    await call_client.leave_group_call(dialog.chat.id)
+                                    success_leave += 1
+                                    break
+                                except Exception:
+                                    pass
             except Exception as e:
                 logger.error(f"Leave error for {phone}: {e}")
-            success_leave += 1
 
-        await callback_query.message.edit_text(f"✅ خروج انجام شد. اکانت‌های بررسی‌شده: {success_leave}", reply_markup=get_main_keyboard())
+        await callback_query.message.edit_text(f"✅ خروج انجام شد. اکانت‌های خارج‌شده: {success_leave}", reply_markup=get_main_keyboard())
     elif data == "panel_del":
         await load_saved_sessions()
         if not user_clients:
