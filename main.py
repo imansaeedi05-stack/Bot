@@ -16,12 +16,19 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid, PasswordHashInvalid
 
+# ایمپورت ایمن و سازگار با نسخه‌های مختلف py-tgcalls
+PYTGCALLS_AVAILABLE = False
 try:
     from pytgcalls import PyTgCalls
     from pytgcalls.types import AudioPiped
     PYTGCALLS_AVAILABLE = True
 except Exception:
-    PYTGCALLS_AVAILABLE = False
+    try:
+        from pytgcalls import PyTgCalls
+        from pytgcalls.types.input_stream import AudioPiped
+        PYTGCALLS_AVAILABLE = True
+    except Exception:
+        PYTGCALLS_AVAILABLE = False
 
 app = Flask("")
 
@@ -89,7 +96,7 @@ async def load_saved_sessions():
 
 async def stability_background_loop():
     while True:
-        await asyncio.sleep(180) # هر ۳ دقیقه یک‌بار برای پایداری استریم
+        await asyncio.sleep(180) # بررسی پایداری استریم هر ۳ دقیقه
         for phone, chat_id in list(active_chats.items()):
             call_client = pytgcalls_clients.get(phone)
             user_cli = user_clients.get(phone)
@@ -121,9 +128,11 @@ async def start_cmd(client, message):
     if not any(t.get_name() == "stability_task" for t in asyncio.all_tasks()):
         asyncio.create_task(stability_background_loop(), name="stability_task")
         
+    status_text = "🟢 فعال و آماده" if PYTGCALLS_AVAILABLE else "🔴 پکیج ویس غیرفعال"
     await message.reply_text(
-        "🤖 **پنل مدیریت ویس‌چت (نسخه ضد قطعی)**\n\n"
-        "سیستم پایداری فعال است و اکانت‌ها در کال می‌مانند.",
+        f"🤖 **پنل مدیریت ویس‌چت (نسخه ضد قطعی)**\n\n"
+        f"وضعیت پکیج ویس: {status_text}\n"
+        "سیستم پایداری فعال است.",
         reply_markup=get_main_keyboard()
     )
 
