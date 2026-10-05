@@ -8,7 +8,6 @@ from pyrogram import Client, filters, idle
 from pyrogram.errors import PasswordHashInvalid, PhoneCodeInvalid, SessionPasswordNeeded, UserNotParticipant
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-# مدیریت سازگاری با نسخه‌های مختلف pytgcalls
 try:
     from pytgcalls import GroupCallFactory
     HAS_GROUP_CALL_FACTORY = True
@@ -42,6 +41,7 @@ API_HASH = "5232c81647167a853b97fcadf68ea9d2"
 BOT_TOKEN = "8797575830:AAFpfYUsF4P-YwQ1HwTeDGhDAWtljxWuGOY"
 OWNER_ID = 7165683193
 
+# کانال دقیق و اختصاصی شما برای اجبار به عضویت
 REQUIRED_CHANNEL = "@feel_your_touch"
 
 bot = Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -413,10 +413,7 @@ async def join_vc(client, message):
         user_cli = user_clients[phone]
         try:
             chat_id = await resolve_and_join_chat(user_cli, target)
-            if HAS_GROUP_CALL_FACTORY:
-                await call_app.join_group_call(chat_id)
-            else:
-                await call_app.join_group_call(chat_id) # یا متد سازگار با نسخه جدید
+            await call_app.join_group_call(chat_id)
             joined += 1
 
             if joined % 5 == 0:
@@ -442,7 +439,6 @@ async def leave_vc(client, message):
                 for call in call_app.active_calls:
                     await call_app.leave_group_call(call.chat_id)
             else:
-                # برای نسخه‌هایی که متد مستقیم دارند
                 pass
         except Exception as e:
             logger.error(f"Error leaving {phone}: {e}")
