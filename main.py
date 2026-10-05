@@ -45,7 +45,6 @@ SESSIONS_DIR = "sessions"
 if not os.path.exists(SESSIONS_DIR):
     os.makedirs(SESSIONS_DIR)
 
-# ساخت فایل صوتی استاندارد برای استریم پایدار در ویس‌چت
 SILENT_AUDIO = "silent.wav"
 if not os.path.exists(SILENT_AUDIO):
     try:
@@ -129,26 +128,15 @@ async def callback_panel(client, callback_query):
             "🔗 لطفاً لینک یا آیدی گروه/کانال را بفرستید\n(مثال: `chat_name` یا `@username` یا لینک دعوت):\n\n*(توجه: پیش از ورود، اکانت باید به گروه دسترسی داشته باشد)*"
         )
     elif data == "panel_leavevc":
-        msg = await callback_query.message.edit_text("⏳ در حال خروج تمامی اکانت‌ها از ویس‌چت...")
+        await callback_query.message.edit_text("⏳ در حال خروج تمامی اکانت‌ها از ویس‌چت...")
         success_leave = 0
         for phone, call_client in pytgcalls_clients.items():
             try:
-                # تلاش برای خروج از ویس‌چت فعال
-                try:
-                    await call_client.leave_group_call()
-                except TypeError:
-                    # اگر متد نیاز به چت آیدی داشت، از طریق کلاینتِ یوزر چک می‌کنیم
-                    user_cli = user_clients.get(phone)
-                    if user_cli:
-                        async for dialog in user_cli.get_dialogs():
-                            if dialog.chat.id:
-                                try:
-                                    await call_client.leave_group_call(dialog.chat.id)
-                                except Exception:
-                                    pass
-                success_leave += 1
+                await call_client.leave_group_call()
             except Exception as e:
                 logger.error(f"Leave error for {phone}: {e}")
+            success_leave += 1
+
         await callback_query.message.edit_text(f"✅ خروج انجام شد. اکانت‌های بررسی‌شده: {success_leave}", reply_markup=get_main_keyboard())
     elif data == "panel_del":
         await load_saved_sessions()
