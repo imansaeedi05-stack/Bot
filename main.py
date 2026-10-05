@@ -431,8 +431,13 @@ async def leave_vc(client, message):
 
 async def main():
     await bot.start()
+    try:
+        await bot.set_webhook("")
+    except Exception:
+        pass
     await load_saved_sessions()
     asyncio.create_task(keep_alive_task())
+    print("Bot is successfully running and listening for updates...")
     await idle()
 
 if __name__ == "__main__":
