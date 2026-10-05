@@ -32,8 +32,7 @@ API_HASH = "5232c81647167a853b97fcadf68ea9d2"
 BOT_TOKEN = "8370573441:AAH0-d7dXkUiigYqLOp0_0M-3jAxtCJjFf0"
 OWNER_ID = 7165683193
 
-# تغییر نام سشن برای جلوگیری از تداخل احتمالی با کدهای قبلی
-bot = Client("my_new_bot_instance", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+bot = Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 user_clients = {}
 pytgcalls_clients = {}
@@ -118,7 +117,9 @@ async def start_cmd(client, message):
         ],
         [
             InlineKeyboardButton("🗑 حذف اکانت", callback_data="menu_del"),
-            InlineKeyboardButton("🔄 بازخوانی سشن‌ها", callback_data="
+            InlineKeyboardButton("🔄 بازخوانی سشن‌ها", callback_data="menu_reload"),
+        ],
+    ])
 
     text = (
         "🤖 **پنل مدیریت پیشرفته اکانت‌های ویس‌چت**\n\n"
@@ -321,7 +322,7 @@ async def join_vc(client, message):
         await message.reply_text("❌ هیچ اکانتی یافت نشد.")
         return
 
-    msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌‌چت...")
+    msg = await message.reply_text("⏳ در حال ورود دسته‌ای اکانت‌ها به ویس‌‌‌‌چت...")
     joined = 0
     failed = 0
 
@@ -353,8 +354,8 @@ async def leave_vc(client, message):
             for call in call_app.active_calls:
                 await call_app.leave_group_call(call.chat_id)
                 left += 1
-        except Exception as int_err:
-            logger.error(f"Error leaving {phone}: {int_err}")
+        except Exception as e:
+            logger.error(f"Error leaving {phone}: {e}")
 
     await msg.edit_text("✅ خروج اکانت‌ها انجام شد.")
 
