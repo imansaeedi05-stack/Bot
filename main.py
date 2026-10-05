@@ -10,6 +10,7 @@ from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid, PasswordHas
 
 try:
     from pytgcalls import PyTgCalls
+    from pytgcalls.types import AudioPiped
     PYTGCALLS_AVAILABLE = True
 except Exception:
     PYTGCALLS_AVAILABLE = False
@@ -82,7 +83,8 @@ async def start_cmd(client, message):
 
     await message.reply_text(
         "🤖 **پنل مدیریت اکانت‌ها و ویس‌چت**\n\n"
-        "برای شروع از دکمه‌های زیر یا دستور `/joinvc` استفاده کنید.",
+        "برای ورود به ویس‌چت از دستور زیر استفاده کنید:\n"
+        "`/joinvc آیدی_یا_لینک_گروه`",
         reply_markup=keyboard
     )
 
@@ -138,7 +140,6 @@ async def callback_del_acc(client, callback_query):
     except Exception as e:
         await callback_query.answer(f"❌ خطا در حذف اکانت: {e}", show_alert=True)
 
-# مدیریت مراحل لاگین کاربر (دریافت شماره، کد و رمز دوم)
 @bot.on_message(filters.text & filters.private)
 async def handle_login_process(client, message):
     user_id = message.from_user.id
@@ -161,7 +162,7 @@ async def handle_login_process(client, message):
                 "client": temp_client,
                 "hash": sent_code.phone_code_hash,
             })
-            await message.reply_text("📩 کد تلگرام ارسال شده را بفرستید (مثال: `12345`):")
+            await message.reply_text("📩 کد تلگرام ارسال شده را بفرستید:")
         except Exception as e:
             await message.reply_text(f"❌ خطا در ارسال کد: {e}")
             del user_login_steps[user_id]
@@ -173,7 +174,6 @@ async def handle_login_process(client, message):
         try:
             await temp_client.sign_in(phone, step_data["hash"], code)
             
-            # اگر ورود موفق بود
             if PYTGCALLS_AVAILABLE:
                 call_client = PyTgCalls(temp_client)
                 await call_client.start()
@@ -184,9 +184,9 @@ async def handle_login_process(client, message):
             await message.reply_text(f"✅ اکانت `{phone}` با موفقیت اضافه و ذخیره شد!")
         except SessionPasswordNeeded:
             step_data["step"] = "password"
-            await message.reply_text("🔑 این اکانت دارای رمز دوم (تایید دو مرحله‌ای) است. لطفاً رمز عبور را وارد کنید:")
+            await message.reply_text("🔑 رمز دو مرحله‌ای را وارد کنید:")
         except PhoneCodeInvalid:
-            await message.reply_text("❌ کد وارد شده اشتباه است. لطفاً دوباره کد را بفرستید:")
+            await message.reply_text("❌ کد اشتباه است. دوباره بفرستید:")
         except Exception as e:
             await message.reply_text(f"❌ خطا: {e}")
             del user_login_steps[user_id]
@@ -205,9 +205,9 @@ async def handle_login_process(client, message):
 
             user_clients[phone] = temp_client
             del user_login_steps[user_id]
-            await message.reply_text(f"✅ رمز تایید شد و اکانت `{phone}` با موفقیت ذخیره شد!")
+            await message.reply_text(f"✅ رمز تایید شد و اکانت `{phone}` ذخیره شد!")
         except PasswordHashInvalid:
-            await message.reply_text("❌ رمز عبور اشتباه است. لطفاً دوباره رمز را بفرستید:")
+            await message.reply_text("❌ رمز اشتباه است. دوباره بفرستید:")
         except Exception as e:
             await message.reply_text(f"❌ خطا: {e}")
             del user_login_steps[user_id]
@@ -222,40 +222,56 @@ async def join_vc(client, message):
         await message.reply_text("❌ لطفاً لینک یا آیدی گروه را وارد کنید.\nمثال: `/joinvc @username`")
         return
 
-    target = message.command[1]
+    target = message.command[1].strip()
     await load_saved_sessions()
 
     if not pytgcalls_clients:
-        await message.reply_text("❌ هیچ کلاینت فعالی برای اتصال به ویس‌‌چت وجود ندارد.")
+        await message.reply_text("❌ هیچ اکانت فعالی برای اتصال وجود ندارد. اول اکانت اضافه کنید.")
         return
 
-    msg = await message.reply_text("⏳ در حال اتصال اکانت‌ها به ویس‌‌چت...")
+    msg = await message.reply_text("⏳ در حال عضویت اکانت‌ها در گروه و اتصال به ویس‌چت...")
     success = 0
+    failed = 0
     
     for phone, call_client in pytgcalls_clients.items():
         user_cli = user_clients[phone]
         try:
-            chat = await user_cli.get_chat(target)
-            await call_client.join_group_call(chat.id)
+            # ابتدا اکانت یوزر باید عضو گروه یا چت مورد نظر شود
+            chat_id = target
+            if "+" in target or "joinchat" in target:
+                chat = await user_cli.join_chat(target)
+                chat_id = chat.id
+            else:
+                try:
+                    chat = await user_cli.join_chat(target)
+                    chat_id = chat.id
+                except Exception:
+                    # اگر از قبل عضو بود یا با get_chat چک می‌کنیم
+                    chat_obj = await user_cli.get_chat(target)
+                    chat_id = chat_obj.id
+
+            # اتصال به ویس‌چت با متد استاندارد py-tgcalls
+            await call_client.join_group_call(chat_id)
             success += 1
-            await asyncio.sleep(1)
+            await asyncio.sleep(1.5)
         except Exception as e:
             logger.error(f"Error joining VC with {phone}: {e}")
+            failed += 1
 
-    await msg.edit_text(f"✅ عملیات اتصال به پایان رسید.\nموفق: {success} اکانت")
+    await msg.edit_text(f"✅ عملیات اتصال به ویس‌چت پایان یافت.\n\n🔹 موفق: {success}\n⚠️ ناموفق: {failed}")
 
 @bot.on_message(filters.command("leavevc"))
 async def leave_vc(client, message):
     if not PYTGCALLS_AVAILABLE:
         return
     
-    msg = await message.reply_text("⏳ در حال خروج از ویس‌‌‌‌چت...")
+    msg = await message.reply_text("⏳ در حال خروج از ویس‌چت...")
     for phone, call_client in pytgcalls_clients.items():
         try:
             await call_client.leave_group_call()
         except Exception as e:
             logger.error(f"Error leaving VC with {phone}: {e}")
-    await msg.edit_text("✅ تمامی اکانت‌ها از ویس‌‌چت خارج شدند.")
+    await msg.edit_text("✅ تمامی اکانت‌ها از ویس‌چت خارج شدند.")
 
 if __name__ == "__main__":
     bot.run()
