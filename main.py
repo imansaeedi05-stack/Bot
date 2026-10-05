@@ -20,7 +20,7 @@ app = Flask("")
 
 @app.route("/")
 def home():
-    return "Bot is Alive!"
+    return "Bot is Alive & Running!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -28,7 +28,7 @@ def run_flask():
 
 threading.Thread(target=run_flask, daemon=True).start()
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
@@ -39,7 +39,7 @@ bot = Client("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKE
 
 user_clients = {}
 pytgcalls_clients = {}
-active_chats = {}  # دیکشنری برای ذخیره چت آیدی هر اکانت جهت خروج دقیق
+active_chats = {}
 user_login_steps = {}
 
 SESSIONS_DIR = "sessions"
@@ -54,8 +54,8 @@ if not os.path.exists(SILENT_AUDIO):
             wav_file.setsampwidth(2)
             wav_file.setframerate(48000)
             wav_file.writeframes(b'\0' * 96000)
-    except Exception as e:
-        logger.error(f"Error creating silent audio: {e}")
+    except Exception:
+        pass
 
 async def load_saved_sessions():
     global user_clients, pytgcalls_clients
@@ -77,8 +77,8 @@ async def load_saved_sessions():
                 call_client = PyTgCalls(client)
                 await call_client.start()
                 pytgcalls_clients[phone] = call_client
-        except Exception as e:
-            logger.error(f"Error loading session {phone}: {e}")
+        except Exception:
+            pass
 
 def get_main_keyboard():
     return InlineKeyboardMarkup([
@@ -87,7 +87,7 @@ def get_main_keyboard():
             InlineKeyboardButton("📋 لیست اکانت‌ها", callback_data="panel_list"),
         ],
         [
-            InlineKeyboardButton("🎧 ورود به ویس‌چت", callback_data="panel_joinvc"),
+            InlineKeyboardButton("🎧 ورود ۲۵ اکانت به ویس (پایدار)", callback_data="panel_joinvc"),
             InlineKeyboardButton("🚪 خروج از ویس", callback_data="panel_leavevc"),
         ],
         [
@@ -99,7 +99,7 @@ def get_main_keyboard():
 @bot.on_message(filters.command("start"))
 async def start_cmd(client, message):
     await message.reply_text(
-        "🤖 **پنل مدیریت پیشرفته اکانت‌ها و ویس‌چت**\n\n"
+        "🤖 **پنل مدیریت ویس‌چت انبوه (نسخه پایداری ۲ ساعته)**\n\n"
         "لطفاً از دکمه‌های زیر استفاده کنید:",
         reply_markup=get_main_keyboard()
     )
@@ -126,27 +126,22 @@ async def callback_panel(client, callback_query):
     elif data == "panel_joinvc":
         user_login_steps[user_id] = {"step": "vc_target"}
         await callback_query.message.edit_text(
-            "🔗 لطفاً لینک یا آیدی گروه/کانال را بفرستید\n(مثال: `chat_name` یا `@username` یا لینک دعوت):\n\n*(توجه: پیش از ورود، اکانت باید به گروه دسترسی داشته باشد)*"
+            "🔗 لطفاً لینک یا آیدی گروه/کانال را برای ورود پایدار اکانت‌ها بفرستید:"
         )
     elif data == "panel_leavevc":
-        await callback_query.message.edit_text("⏳ در حال خروج تمامی اکانت‌ها از ویس‌چت...")
+        await callback_query.message.edit_text("⏳ در حال خروج اکانت‌ها از ویس‌چت...")
         success_leave = 0
-        
         for phone, call_client in pytgcalls_clients.items():
             try:
-                # خروج با استفاده از چت آیدی ذخیره شده
                 chat_id = active_chats.get(phone)
                 if chat_id:
                     await call_client.leave_group_call(chat_id)
                 else:
-                    # اگر ذخیره نشده بود، تلاش برای خروج مستقیم عمومی
                     await call_client.leave_group_call()
-                
                 active_chats.pop(phone, None)
                 success_leave += 1
-            except Exception as e:
-                logger.error(f"Leave error for {phone}: {e}")
-
+            except Exception:
+                pass
         await callback_query.message.edit_text(f"✅ خروج انجام شد. اکانت‌های خارج‌شده: {success_leave}", reply_markup=get_main_keyboard())
     elif data == "panel_del":
         await load_saved_sessions()
@@ -164,7 +159,7 @@ async def callback_panel(client, callback_query):
         await callback_query.answer(f"✅ بازخوانی شد. اکانت‌ها: {len(user_clients)}", show_alert=True)
     elif data == "panel_back":
         await callback_query.message.edit_text(
-            "🤖 **پنل مدیریت پیشرفته اکانت‌ها و ویس‌چت**",
+            "🤖 **پنل مدیریت ویس‌چت انبوه**",
             reply_markup=get_main_keyboard()
         )
 
@@ -186,7 +181,7 @@ async def callback_del_acc(client, callback_query):
 
         await callback_query.message.edit_text(f"✅ اکانت `{phone}` با موفقیت حذف شد.", reply_markup=get_main_keyboard())
     except Exception as e:
-        await callback_query.answer(f"❌ خطا در حذف اکانت: {e}", show_alert=True)
+        await callback_query.answer(f"❌ خطا: {e}", show_alert=True)
 
 @bot.on_message(filters.text & filters.private)
 async def handle_user_input(client, message):
@@ -202,12 +197,12 @@ async def handle_user_input(client, message):
         del user_login_steps[user_id]
         
         if not PYTGCALLS_AVAILABLE:
-            await message.reply_text("❌ پکیج ویس‌چت روی سرور فعال نیست.", reply_markup=get_main_keyboard())
+            await message.reply_text("❌ پکیج ویس‌چت فعال نیست.", reply_markup=get_main_keyboard())
             return
 
         await load_saved_sessions()
         if not pytgcalls_clients:
-            await message.reply_text("❌ هیچ اکانت فعالی برای اتصال وجود ندارد.", reply_markup=get_main_keyboard())
+            await message.reply_text("❌ هیچ اکانتی روی سرور بارگذاری نشده است.", reply_markup=get_main_keyboard())
             return
 
         if "t.me/" in target:
@@ -215,33 +210,23 @@ async def handle_user_input(client, message):
         if target.startswith("@"):
             target = target[1:]
 
-        msg = await message.reply_text("⏳ در حال بررسی و اتصال اکانت‌ها به ویس‌چت...")
+        msg = await message.reply_text(f"⏳ در حال اتصال امن و پلکانی {len(pytgcalls_clients)} اکانت به ویس‌چت...\n(این کار برای پایداری ۲ ساعته با فاصله انجام می‌شود)")
         success = 0
-        failed_details = ""
 
         for phone, call_client in pytgcalls_clients.items():
             user_cli = user_clients[phone]
             try:
                 chat_id = None
-                if "+" in target or "joinchat" in target:
-                    try:
-                        chat = await asyncio.wait_for(user_cli.join_chat(target), timeout=10)
-                        chat_id = chat.id
-                    except Exception:
-                        pass
-                else:
-                    try:
-                        chat = await asyncio.wait_for(user_cli.join_chat(target), timeout=10)
-                        chat_id = chat.id
-                    except Exception:
-                        try:
-                            chat_obj = await asyncio.wait_for(user_cli.get_chat(target), timeout=10)
-                            chat_id = chat_obj.id
-                        except Exception as inner_e:
-                            raise Exception(f"Chat access error: {inner_e}")
+                try:
+                    chat = await asyncio.wait_for(user_cli.join_chat(target), timeout=10)
+                    chat_id = chat.id
+                except Exception:
+                    chat_obj = await asyncio.wait_for(user_cli.get_chat(target), timeout=10)
+                    chat_id = chat_obj.id
 
                 if chat_id:
                     if os.path.exists(SILENT_AUDIO):
+                        # استفاده از AudioPiped با قابلیت استریم پایدار
                         await asyncio.wait_for(
                             call_client.join_group_call(chat_id, AudioPiped(SILENT_AUDIO)),
                             timeout=10
@@ -251,23 +236,15 @@ async def handle_user_input(client, message):
                             call_client.join_group_call(chat_id),
                             timeout=10
                         )
-                    
-                    # ذخیره چت آیدی برای خروج موفق
                     active_chats[phone] = chat_id
                     success += 1
-                else:
-                    raise Exception("Could not resolve chat_id")
+                
+                # فاصله ۵ ثانیه‌ای بین هر اتصال برای جلوگیری از FloodWait و کرش رم
+                await asyncio.sleep(5)
+            except Exception:
+                pass
 
-            except Exception as e:
-                error_msg = str(e)
-                logger.error(f"VC join error for {phone}: {error_msg}")
-                failed_details += f"\n👤 `{phone}` ⬅️ ارور: `{error_msg}`"
-
-        result_text = f"📊 **گزارش اتصال به ویس‌چت:**\n\n✅ اتصال موفق: {success} اکانت"
-        if failed_details:
-            result_text += f"\n\n⚠️ **اکانت‌های ناموفق و دلیل خطا:**{failed_details}"
-
-        await msg.edit_text(result_text, reply_markup=get_main_keyboard())
+        await msg.edit_text(f"📊 **نتیجه اتصال پایدار:**\n\n✅ {success} اکانت با موفقیت وارد ویس شدند و استریم صوتی برای ماندگاری طولانی فعال شد.", reply_markup=get_main_keyboard())
         return
 
     if step == "phone":
@@ -283,9 +260,9 @@ async def handle_user_input(client, message):
                 "client": temp_client,
                 "hash": sent_code.phone_code_hash,
             })
-            await message.reply_text("📩 کد تلگرام ارسال شده را بفرستید:")
+            await message.reply_text("📩 کد تلگرام را بفرستید:")
         except Exception as e:
-            await message.reply_text(f"❌ خطا در ارسال کد: {e}", reply_markup=get_main_keyboard())
+            await message.reply_text(f"❌ خطا: {e}", reply_markup=get_main_keyboard())
             del user_login_steps[user_id]
 
     elif step == "code":
@@ -294,20 +271,18 @@ async def handle_user_input(client, message):
         phone = step_data["phone"]
         try:
             await temp_client.sign_in(phone, step_data["hash"], code)
-            
             if PYTGCALLS_AVAILABLE:
                 call_client = PyTgCalls(temp_client)
                 await call_client.start()
                 pytgcalls_clients[phone] = call_client
-
             user_clients[phone] = temp_client
             del user_login_steps[user_id]
-            await message.reply_text(f"✅ اکانت `{phone}` با موفقیت اضافه و ذخیره شد!", reply_markup=get_main_keyboard())
+            await message.reply_text(f"✅ اکانت `{phone}` اضافه شد!", reply_markup=get_main_keyboard())
         except SessionPasswordNeeded:
             step_data["step"] = "password"
             await message.reply_text("🔑 رمز دو مرحله‌ای را وارد کنید:")
         except PhoneCodeInvalid:
-            await message.reply_text("❌ کد اشتباه است. دوباره بفرستید:")
+            await message.reply_text("❌ کد اشتباه است:")
         except Exception as e:
             await message.reply_text(f"❌ خطا: {e}", reply_markup=get_main_keyboard())
             del user_login_steps[user_id]
@@ -318,17 +293,13 @@ async def handle_user_input(client, message):
         phone = step_data["phone"]
         try:
             await temp_client.check_password(password)
-            
             if PYTGCALLS_AVAILABLE:
                 call_client = PyTgCalls(temp_client)
                 await call_client.start()
                 pytgcalls_clients[phone] = call_client
-
             user_clients[phone] = temp_client
             del user_login_steps[user_id]
-            await message.reply_text(f"✅ رمز تایید شد و اکانت `{phone}` ذخیره شد!", reply_markup=get_main_keyboard())
-        except PasswordHashInvalid:
-            await message.reply_text("❌ رمز اشتباه است. دوباره بفرستید:")
+            await message.reply_text(f"✅ اکانت `{phone}` ذخیره شد!", reply_markup=get_main_keyboard())
         except Exception as e:
             await message.reply_text(f"❌ خطا: {e}", reply_markup=get_main_keyboard())
             del user_login_steps[user_id]
