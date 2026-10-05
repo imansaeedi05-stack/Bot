@@ -53,7 +53,6 @@ if not os.path.exists(SILENT_AUDIO):
             wav_file.setnchannels(1)
             wav_file.setsampwidth(2)
             wav_file.setframerate(48000)
-            # ایجاد یک ثانیه سکوت به عنوان پکت صوتی
             wav_file.writeframes(b'\0' * 96000)
     except Exception as e:
         logger.error(f"Error creating silent audio: {e}")
@@ -131,12 +130,26 @@ async def callback_panel(client, callback_query):
         )
     elif data == "panel_leavevc":
         msg = await callback_query.message.edit_text("⏳ در حال خروج تمامی اکانت‌ها از ویس‌چت...")
+        success_leave = 0
         for phone, call_client in pytgcalls_clients.items():
             try:
-                await call_client.leave_group_call()
+                # تلاش برای خروج از ویس‌چت فعال
+                try:
+                    await call_client.leave_group_call()
+                except TypeError:
+                    # اگر متد نیاز به چت آیدی داشت، از طریق کلاینتِ یوزر چک می‌کنیم
+                    user_cli = user_clients.get(phone)
+                    if user_cli:
+                        async for dialog in user_cli.get_dialogs():
+                            if dialog.chat.id:
+                                try:
+                                    await call_client.leave_group_call(dialog.chat.id)
+                                except Exception:
+                                    pass
+                success_leave += 1
             except Exception as e:
-                logger.error(f"Leave error: {e}")
-        await callback_query.message.edit_text("✅ تمام اکانت‌ها از ویس‌چت خارج شدند.", reply_markup=get_main_keyboard())
+                logger.error(f"Leave error for {phone}: {e}")
+        await callback_query.message.edit_text(f"✅ خروج انجام شد. اکانت‌های بررسی‌شده: {success_leave}", reply_markup=get_main_keyboard())
     elif data == "panel_del":
         await load_saved_sessions()
         if not user_clients:
@@ -222,7 +235,6 @@ async def handle_user_input(client, message):
                         chat_obj = await user_cli.get_chat(target)
                         chat_id = chat_obj.id
 
-                # اتصال اکانت به ویس‌چت به صورت بی‌صدا (با استریم صوتی خالی)
                 if os.path.exists(SILENT_AUDIO):
                     await call_client.join_group_call(
                         chat_id,
