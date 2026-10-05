@@ -1,6 +1,13 @@
 import os
 import logging
 import asyncio
+
+# اصلاح حیاتی برای جلوگیری از خطای Event Loop در پایتون‌های جدید رندر
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
 import re
 import wave
 from flask import Flask
@@ -80,16 +87,14 @@ async def load_saved_sessions():
         except Exception:
             pass
 
-# لوپ نگهدارنده پایداری استریم‌ها در پس‌زمینه برای جلوگیری از قطعی ۱۰ دقیقه‌ای
 async def stability_background_loop():
     while True:
-        await asyncio.sleep(180) # هر ۳ دقیقه یک‌بار وضعیت را بررسی می‌کند
+        await asyncio.sleep(180) # هر ۳ دقیقه یک‌بار برای پایداری استریم
         for phone, chat_id in list(active_chats.items()):
             call_client = pytgcalls_clients.get(phone)
             user_cli = user_clients.get(phone)
             if call_client and user_cli:
                 try:
-                    # بررسی و بازنشانی اتصال در صورت افت کیفیت یا سکوت شبکه
                     if os.path.exists(SILENT_AUDIO):
                         await call_client.change_stream(chat_id, AudioPiped(SILENT_AUDIO))
                 except Exception:
@@ -113,7 +118,6 @@ def get_main_keyboard():
 
 @bot.on_message(filters.command("start"))
 async def start_cmd(client, message):
-    # شروع لوپ پایداری در اولین استارت ربات
     if not any(t.get_name() == "stability_task" for t in asyncio.all_tasks()):
         asyncio.create_task(stability_background_loop(), name="stability_task")
         
@@ -232,7 +236,6 @@ async def handle_user_input(client, message):
         msg = await message.reply_text("⏳ در حال اتصال پایدار اکانت‌ها به ویس‌چت...")
         success = 0
 
-        # اطمینان از اجرای لوپ پایداری پس‌زمینه
         if not any(t.get_name() == "stability_task" for t in asyncio.all_tasks()):
             asyncio.create_task(stability_background_loop(), name="stability_task")
 
