@@ -1,4 +1,4 @@
 pyrogram
-tgcalls
 py-tgcalls
+TgCrypto
 flask
