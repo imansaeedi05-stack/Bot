@@ -1,4 +1,4 @@
-pyrogram
-tgcrypto
-pytgcalls
-apscheduler
+pyrogram==2.0.106
+tgcrypto==1.2.5
+pytgcalls==3.0.0.dev18
+apscheduler==3.10.4
