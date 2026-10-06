@@ -1,27 +1,35 @@
-import os
 import asyncio
+import sys
+
+# --- اصلاحیه حیاتی برای پایتون ۳.۱۰ به بالا و Render ---
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+import os
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery
 from pytgcalls import PyTgCalls
 from pytgcalls.types import AudioPiped
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# تنظیمات اصلی ربات مدیریت (از BotFather و my.telegram.org بگیرید)
-API_ID = 12345678  # API ID خود را جایگزین کنید
-API_HASH = "YOUR_API_HASH"
-BOT_TOKEN = "YOUR_BOT_TOKEN"
+# تنظیمات ربات شما
+API_ID = 38859635
+API_HASH = "5232c81647167a853b97fcadf68ea9d2"
+BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
 
 bot = Client("main_manager_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 scheduler = AsyncIOScheduler()
 scheduler.start()
 
 user_states = {}
-active_voice_sessions = {} # نگهداری کلاینت‌ها و مدیریت ویس‌های فعال
+active_voice_sessions = {}
 
 SESSIONS_DIR = "sessions"
 os.makedirs(SESSIONS_DIR, exist_ok=True)
 
-# منوی اصلی پنل شیشه‌ای
 def main_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ افزودن اکانت جدید", callback_data="add_account")],
@@ -39,7 +47,6 @@ async def start_handler(client, message: Message):
         reply_markup=main_menu()
     )
 
-# ==================== بخش اول: افزودن اکانت (شماره، کد، پسورد) ====================
 @bot.on_callback_query(filters.regex("add_account"))
 async def add_account_callback(client, callback: CallbackQuery):
     user_id = callback.from_user.id
@@ -57,7 +64,6 @@ async def handle_text_inputs(client, message: Message):
 
     state = user_states[user_id].get("step")
 
-    # ۱. دریافت شماره
     if state == "waiting_phone":
         phone = message.text.strip()
         user_states[user_id]["phone"] = phone
@@ -77,7 +83,6 @@ async def handle_text_inputs(client, message: Message):
             user_states.pop(user_id, None)
             await message.reply_text(f"❌ خطا در ارسال کد: {e}\nمجدداً از /start شروع کنید.")
 
-    # ۲. دریافت کد تایید
     elif state == "waiting_code":
         code = message.text.strip()
         app = user_states[user_id]["app"]
@@ -88,7 +93,6 @@ async def handle_text_inputs(client, message: Message):
             await app.sign_in(phone, phone_code_hash, code)
             await app.disconnect()
             
-            # ذخیره نهایی سشن
             final_app = Client(f"{SESSIONS_DIR}/{phone}", api_id=API_ID, api_hash=API_HASH)
             await final_app.start()
             await final_app.stop()
@@ -103,7 +107,6 @@ async def handle_text_inputs(client, message: Message):
                 user_states.pop(user_id, None)
                 await message.reply_text(f"❌ خطا در ورود: {e}\nمجدداً از /start شروع کنید.")
 
-    # ۳. دریافت رمز دو مرحله‌ای
     elif state == "waiting_password":
         password = message.text.strip()
         app = user_states[user_id]["app"]
@@ -123,7 +126,6 @@ async def handle_text_inputs(client, message: Message):
             user_states.pop(user_id, None)
             await message.reply_text(f"❌ رمز عبور اشتباه است یا خطایی رخ داد: {e}\nمجدداً از /start شروع کنید.")
 
-    # ۴. دریافت لینک گروه برای جوین ویس‌‌کال
     elif user_states[user_id].get("step") == "waiting_voice_link":
         link = message.text.strip()
         phone = user_states[user_id]["selected_account"]
@@ -132,38 +134,32 @@ async def handle_text_inputs(client, message: Message):
         status_msg = await message.reply_text(f"⏳ در حال اتصال اکانت `+{phone}` به ویس‌کال گروه...")
         
         try:
-            # استارت کلاینت اکانت مد نظر
             acc_client = Client(f"{SESSIONS_DIR}/{phone}", api_id=API_ID, api_hash=API_HASH)
             await acc_client.start()
             
-            # جوین شدن به چت/گروه
             chat = await acc_client.join_chat(link)
             chat_id = chat.id
 
-            # اتصال به ویس‌کال با PyTgCalls
             call_client = PyTgCalls(acc_client)
             await call_client.start()
             
-            # ورود به ویس (به صورت سایلنت یا با استریم خالی جهت ماندن در ویس)
+            # برای ماندن در ویس نیاز به یک فایل صوتی کوچک مثل silent.wav یا استریم دارید
             await call_client.join_group_call(
                 chat_id,
-                AudioPiped("silent.wav") # یا جریان صوتی مد نظرتان (باید یک فایل صوتی کوتاه سایلنت یا موزیک کنار کد باشد)
+                AudioPiped("silent.wav")
             )
 
-            # تعریف تابع خروج خودکار پس از ۲ ساعت
             async def auto_leave():
                 try:
                     await call_client.leave_group_call(chat_id)
                     await acc_client.stop()
                     active_voice_sessions.pop(phone, None)
-                    print(f"Account +{phone} left voice automatically after 2 hours.")
-                except Exception as ex:
-                    print(f"Error in auto leave: {ex}")
+                except:
+                    pass
 
-            # ثبت تایمر ۲ ساعته
+            # ثبت تایمر ۲ ساعته خروج خودکار
             job = scheduler.add_job(auto_leave, 'interval', hours=2)
             
-            # ذخیره سشن فعال در حافظه ربات
             active_voice_sessions[phone] = {
                 "acc_client": acc_client,
                 "call_client": call_client,
@@ -179,7 +175,6 @@ async def handle_text_inputs(client, message: Message):
         except Exception as e:
             await status_msg.edit_text(f"❌ خطا در اتصال به ویس‌کال: {e}", reply_markup=main_menu())
 
-# ==================== بخش دوم: لیست اکانت‌ها ====================
 @bot.on_callback_query(filters.regex("list_accounts"))
 async def list_accounts_callback(client, callback: CallbackQuery):
     sessions = [f.replace(".session", "") for f in os.listdir(SESSIONS_DIR) if f.endswith(".session")]
@@ -197,7 +192,6 @@ async def list_accounts_callback(client, callback: CallbackQuery):
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")]])
     )
 
-# ==================== بخش سوم: حذف اکانت ====================
 @bot.on_callback_query(filters.regex("delete_account"))
 async def delete_account_menu(client, callback: CallbackQuery):
     sessions = [f.replace(".session", "") for f in os.listdir(SESSIONS_DIR) if f.endswith(".session")]
@@ -217,10 +211,9 @@ async def delete_account_menu(client, callback: CallbackQuery):
 async def perform_delete(client, callback: CallbackQuery):
     phone = callback.data.replace("del_", "")
     
-    # اگر اکانت در ویس فعال است اول خارجش کنیم
     if phone in active_voice_sessions:
         try:
-            await active_voice_sessions[phone]["call_client.leave_group_call"](active_voice_sessions[phone]["chat_id"])
+            await active_voice_sessions[phone]["call_client"].leave_group_call(active_voice_sessions[phone]["chat_id"])
             await active_voice_sessions[phone]["acc_client"].stop()
             active_voice_sessions[phone]["job"].remove()
             active_voice_sessions.pop(phone, None)
@@ -234,7 +227,6 @@ async def perform_delete(client, callback: CallbackQuery):
     else:
         await callback.message.edit_text("❌ فایل اکانت پیدا نشد.", reply_markup=main_menu())
 
-# ==================== بخش چهارم: ورود اکانت به ویس‌کال ====================
 @bot.on_callback_query(filters.regex("join_voice_menu"))
 async def join_voice_menu(client, callback: CallbackQuery):
     sessions = [f.replace(".session", "") for f in os.listdir(SESSIONS_DIR) if f.endswith(".session")]
@@ -262,7 +254,6 @@ async def select_account_for_voice(client, callback: CallbackQuery):
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")]])
     )
 
-# ==================== بخش پنجم: خروج از ویس‌کال ====================
 @bot.on_callback_query(filters.regex("leave_voice_menu"))
 async def leave_voice_menu(client, callback: CallbackQuery):
     if not active_voice_sessions:
