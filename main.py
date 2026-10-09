@@ -1,299 +1,219 @@
 import asyncio
-import sys
-
-# --- اصلاحیه حیاتی برای پایتون ۳.۱۰ به بالا و Render ---
-try:
-    asyncio.get_running_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-import os
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery
-from pytgcalls import PyTgCalls
-from pytgcalls.types import AudioPiped
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from pyrogram.types import Message
+from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid, PhoneCodeExpired
 
-# تنظیمات ربات شما
+# اطلاعات اختصاصی شما
 API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
 BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
 
-bot = Client("main_manager_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-scheduler = AsyncIOScheduler()
-scheduler.start()
+ADMIN_ID = None  # اولین کسی که ربات را استارت بزند به عنوان ادمین شناخته می‌شود
 
-user_states = {}
-active_voice_sessions = {}
+accounts = []             
+collected_users = set()   
+temp_login_data = {}      
 
-SESSIONS_DIR = "sessions"
-os.makedirs(SESSIONS_DIR, exist_ok=True)
+bot = Client("admin_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-def main_menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ افزودن اکانت جدید", callback_data="add_account")],
-        [InlineKeyboardButton("📋 لیست اکانت‌ها", callback_data="list_accounts"),
-         InlineKeyboardButton("🗑️ حذف اکانت", callback_data="delete_account")],
-        [InlineKeyboardButton("🎧 ورود اکانت به ویس‌کال", callback_data="join_voice_menu")],
-        [InlineKeyboardButton("🚪 خروج از ویسکال", callback_data="leave_voice_menu")]
-    ])
 
+# تعیین ادمین خودکار با اولین استارت
 @bot.on_message(filters.command("start"))
-async def start_handler(client, message: Message):
+async def start_cmd(client: Client, message: Message):
+    global ADMIN_ID
+    if ADMIN_ID is None:
+        ADMIN_ID = message.from_user.id
+        await message.reply_text(f"✅ شما به عنوان ادمین اصلی ربات ثبت شدید (`{ADMIN_ID}`).")
+    
+    if message.from_user.id != ADMIN_ID:
+        return await message.reply_text("❌ شما اجازه دسترسی به این ربات را ندارید.")
+
+    text = (
+        "🤖 **سیستم استخراج آیدی و ارسال انبوه**\n\n"
+        "1️⃣ `/login <شماره>` : شروع ورود اکانت (مثال: `/login +98912...`)\n"
+        "2️⃣ `/code <کد>` : ورود کد تایید تلگرام\n"
+        "3️⃣ `/password <رمز>` : ورود رمز دوم (در صورت داشتن 2FA)\n"
+        "4️⃣ `/join <لینک گروه>` : **فقط اولین اکانت** وارد گروه شده و آیدی‌ها را جمع می‌کند\n"
+        "5️⃣ `/send_all <متن>` : تقسیم آیدی‌ها بین تمام اکانت‌ها و ارسال امن\n"
+        "6️⃣ `/stats` : مشاهده آمار اکانت‌ها و آیدی‌ها"
+    )
+    await message.reply_text(text)
+
+
+# 1️⃣ شروع فرآیند ورود با شماره
+@bot.on_message(filters.command("login"))
+async def login_start(client: Client, message: Message):
+    if message.from_user.id != ADMIN_ID: return
+    try:
+        phone = message.text.split(" ", 1)[1]
+    except IndexError:
+        return await message.reply_text("❌ لطفاً شماره تلفن را جلوی دستور بنویسید.\nمثال:\n`/login +989123456789`")
+
+    await message.reply_text(f"⏳ در حال ارسال کد تایید به شماره `{phone}`...")
+    
+    try:
+        user_client = Client(
+            name=f"acc_{phone}",
+            api_id=API_ID,
+            api_hash=API_HASH,
+            in_memory=True
+        )
+        await user_client.connect()
+        sent_code = await user_client.send_code(phone)
+        
+        temp_login_data[ADMIN_ID] = {
+            "client": user_client,
+            "phone": phone,
+            "phone_code_hash": sent_code.phone_code_hash
+        }
+        
+        await message.reply_text("✅ کد تایید تلگرام ارسال شد.\nحالا کد دریافتی را با دستور زیر بفرستید:\n`/code 12345`")
+    except Exception as e:
+        await message.reply_text(f"❌ خطا در ارسال کد: {e}")
+
+
+# 2️⃣ دریافت کد تایید
+@bot.on_message(filters.command("code"))
+async def enter_code(client: Client, message: Message):
+    if message.from_user.id != ADMIN_ID: return
+    if ADMIN_ID not in temp_login_data:
+        return await message.reply_text("❌ ابتدا باید دستور `/login` را بزنید.")
+    
+    try:
+        code = message.text.split(" ", 1)[1].strip()
+    except IndexError:
+        return await message.reply_text("❌ لطفاً کد را بنویسید. مثال: `/code 12345`")
+        
+    data = temp_login_data[ADMIN_ID]
+    user_client = data["client"]
+    phone = data["phone"]
+    phone_code_hash = data["phone_code_hash"]
+    
+    try:
+        await user_client.sign_in(phone, phone_code_hash, code)
+        session_string = await user_client.export_session_string()
+        await finalize_login(user_client, session_string, message)
+        
+    except SessionPasswordNeeded:
+        await message.reply_text("🔒 این اکانت دارای رمز دوم (تایید دو مرحله‌ای) است.\nلطفاً رمز عبور خود را با دستور زیر بفرستید:\n`/password رمز_شما`")
+        
+    except (PhoneCodeInvalid, PhoneCodeExpired):
+        await message.reply_text("❌ کد وارد شده اشتباه یا منقضی شده است.")
+    except Exception as e:
+        await message.reply_text(f"❌ خطا: {e}")
+
+
+# 3️⃣ دریافت رمز دوم (در صورت نیاز)
+@bot.on_message(filters.command("password"))
+async def enter_password(client: Client, message: Message):
+    if message.from_user.id != ADMIN_ID: return
+    if ADMIN_ID not in temp_login_data:
+        return await message.reply_text("❌ فرآیند لاگین فعال نیست.")
+        
+    try:
+        password = message.text.split(" ", 1)[1].strip()
+    except IndexError:
+        return await message.reply_text("❌ لطفاً رمز را بنویسید. مثال: `/password 1234`")
+        
+    data = temp_login_data[ADMIN_ID]
+    user_client = data["client"]
+    
+    try:
+        await user_client.check_password(password)
+        session_string = await user_client.export_session_string()
+        await finalize_login(user_client, session_string, message)
+    except Exception as e:
+        await message.reply_text(f"❌ رمز عبور اشتباه است یا خطایی رخ داد: {e}")
+
+
+# نهایی کردن و ذخیره اکانت متصل شده
+async def finalize_login(user_client, session_string, message):
+    # تنظیم هندلر استخراج آیدی (فقط روی اولین اکانت یا تمام اکانت‌هایی که پیام می‌بینند فعال می‌شود)
+    @user_client.on_message(filters.group)
+    async def collect_only(c: Client, msg: Message):
+        user = msg.from_user
+        if user and not user.is_bot and user.id not in collected_users:
+            collected_users.add(user.id)
+
+    accounts.append(user_client)
+    me = await user_client.get_me()
+    
+    if ADMIN_ID in temp_login_data:
+        del temp_login_data[ADMIN_ID]
+        
     await message.reply_text(
-        "🤖 **پنل حرفه‌ای مدیریت اکانت‌ها و ویس‌کال تلگرام**\n\n"
-        "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
-        reply_markup=main_menu()
+        f"✅ اکانت **{me.first_name}** (`{me.id}`) با موفقیت متصل شد!\n"
+        f"👥 تعداد کل اکانت‌های متصل: `{len(accounts)}`"
     )
 
-@bot.on_callback_query(filters.regex("add_account"))
-async def add_account_callback(client, callback: CallbackQuery):
-    user_id = callback.from_user.id
-    user_states[user_id] = {"step": "waiting_phone"}
-    await callback.message.edit_text(
-        "📱 لطفاً **شماره تلفن** اکانت را با کد کشور ارسال کنید (مثلاً: `989123456789+`):",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")]])
-    )
 
-@bot.on_message(filters.text & ~filters.command(["start"]))
-async def handle_text_inputs(client, message: Message):
-    user_id = message.from_user.id
-    if user_id not in user_states:
-        return
-
-    state = user_states[user_id].get("step")
-
-    if state == "waiting_phone":
-        phone = message.text.strip()
-        user_states[user_id]["phone"] = phone
-        
-        session_name = f"{SESSIONS_DIR}/{phone}"
-        app = Client(session_name, api_id=API_ID, api_hash=API_HASH, in_memory=True)
-        await app.connect()
-        
-        try:
-            sent_code = await app.send_code(phone)
-            user_states[user_id]["app"] = app
-            user_states[user_id]["phone_code_hash"] = sent_code.phone_code_hash
-            user_states[user_id]["step"] = "waiting_code"
-            await message.reply_text("✉️ کد تایید تلگرام ارسال شد. لطفاً **کد دریافتی** را ارسال کنید:")
-        except Exception as e:
-            await app.disconnect()
-            user_states.pop(user_id, None)
-            await message.reply_text(f"❌ خطا در ارسال کد: {e}\nمجدداً از /start شروع کنید.")
-
-    elif state == "waiting_code":
-        code = message.text.strip()
-        app = user_states[user_id]["app"]
-        phone = user_states[user_id]["phone"]
-        phone_code_hash = user_states[user_id]["phone_code_hash"]
-
-        try:
-            await app.sign_in(phone, phone_code_hash, code)
-            await app.disconnect()
-            
-            final_app = Client(f"{SESSIONS_DIR}/{phone}", api_id=API_ID, api_hash=API_HASH)
-            await final_app.start()
-            await final_app.stop()
-            
-            user_states.pop(user_id, None)
-            await message.reply_text("✅ اکانت با موفقیت اضافه شد!", reply_markup=main_menu())
-        except Exception as e:
-            if "SessionPasswordNeeded" in str(e):
-                user_states[user_id]["step"] = "waiting_password"
-                await message.reply_text("🔐 این اکانت دارای **رمز عبور دو مرحله‌ای (2FA)** است. لطفاً رمز خود را وارد کنید:")
-            else:
-                user_states.pop(user_id, None)
-                await message.reply_text(f"❌ خطا در ورود: {e}\nمجدداً از /start شروع کنید.")
-
-    elif state == "waiting_password":
-        password = message.text.strip()
-        app = user_states[user_id]["app"]
-        phone = user_states[user_id]["phone"]
-        
-        try:
-            await app.check_password(password)
-            await app.disconnect()
-
-            final_app = Client(f"{SESSIONS_DIR}/{phone}", api_id=API_ID, api_hash=API_HASH)
-            await final_app.start()
-            await final_app.stop()
-
-            user_states.pop(user_id, None)
-            await message.reply_text("✅ اکانت با رمز دو مرحله‌ای با موفقیت اضافه شد!", reply_markup=main_menu())
-        except Exception as e:
-            user_states.pop(user_id, None)
-            await message.reply_text(f"❌ رمز عبور اشتباه است یا خطایی رخ داد: {e}\nمجدداً از /start شروع کنید.")
-
-    elif user_states[user_id].get("step") == "waiting_voice_link":
-        link = message.text.strip()
-        phone = user_states[user_id]["selected_account"]
-        user_states.pop(user_id, None)
-
-        status_msg = await message.reply_text(f"⏳ در حال اتصال اکانت `+{phone}` به ویس‌کال گروه...")
-        
-        try:
-            acc_client = Client(f"{SESSIONS_DIR}/{phone}", api_id=API_ID, api_hash=API_HASH)
-            await acc_client.start()
-            
-            chat = await acc_client.join_chat(link)
-            chat_id = chat.id
-
-            call_client = PyTgCalls(acc_client)
-            await call_client.start()
-            
-            # برای ماندن در ویس نیاز به یک فایل صوتی کوچک مثل silent.wav یا استریم دارید
-            await call_client.join_group_call(
-                chat_id,
-                AudioPiped("silent.wav")
-            )
-
-            async def auto_leave():
-                try:
-                    await call_client.leave_group_call(chat_id)
-                    await acc_client.stop()
-                    active_voice_sessions.pop(phone, None)
-                except:
-                    pass
-
-            # ثبت تایمر ۲ ساعته خروج خودکار
-            job = scheduler.add_job(auto_leave, 'interval', hours=2)
-            
-            active_voice_sessions[phone] = {
-                "acc_client": acc_client,
-                "call_client": call_client,
-                "chat_id": chat_id,
-                "job": job
-            }
-
-            await status_msg.edit_text(
-                f"✅ اکانت `+{phone}` با موفقیت وارد ویس‌کال شد!\n"
-                f"⏱️ تایمر **۲ ساعته** برای خروج خودکار فعال شد.",
-                reply_markup=main_menu()
-            )
-        except Exception as e:
-            await status_msg.edit_text(f"❌ خطا در اتصال به ویس‌کال: {e}", reply_markup=main_menu())
-
-@bot.on_callback_query(filters.regex("list_accounts"))
-async def list_accounts_callback(client, callback: CallbackQuery):
-    sessions = [f.replace(".session", "") for f in os.listdir(SESSIONS_DIR) if f.endswith(".session")]
+# 4️⃣ فقط اولین اکانت وارد گروه هدف می‌شود و آیدی جمع می‌کند
+@bot.on_message(filters.command("join"))
+async def join_group(client: Client, message: Message):
+    if message.from_user.id != ADMIN_ID: return
+    if not accounts:
+        return await message.reply_text("❌ اول باید حداقل یک اکانت اضافه کنید.")
     
-    if not sessions:
-        text = "📭 هیچ اکانتی تاکنون اضافه نشده است."
-    else:
-        text = "📋 **لیست اکانت‌های ثبت‌شده:**\n\n"
-        for idx, acc in enumerate(sessions, 1):
-            status = "🟢 (در ویس)" if acc in active_voice_sessions else "⚪️ (آفلاین/آزاد)"
-            text += f"{idx}. `+{acc}` ── {status}\n"
-
-    await callback.message.edit_text(
-        text, 
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")]])
-    )
-
-@bot.on_callback_query(filters.regex("delete_account"))
-async def delete_account_menu(client, callback: CallbackQuery):
-    sessions = [f.replace(".session", "") for f in os.listdir(SESSIONS_DIR) if f.endswith(".session")]
-    if not sessions:
-        await callback.message.edit_text(
-            "📭 اکانتی برای حذف وجود ندارد.", 
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")]])
+    try:
+        link = message.text.split(" ", 1)[1]
+        # فقط اکانت اول (اندیس 0) وارد گروه می‌شود
+        first_acc = accounts[0]
+        chat = await first_acc.join_chat(link)
+        
+        await message.reply_text(
+            f"✅ اولین اکانت با موفقیت وارد گروه **{chat.title}** شد.\n"
+            f"مخفیانه در حال جمع‌آوری آیدی کاربران فعال است..."
         )
-        return
+    except Exception as e:
+        await message.reply_text(f"❌ خطا در ورود به گروه: {e}")
 
-    keyboard = [[InlineKeyboardButton(f"🗑️ حذف `+{acc}`", callback_data=f"del_{acc}")] for acc in sessions]
-    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")])
+
+# 5️⃣ ارسال پیام به آیدی‌های جمع‌آوری شده (با تقسیم کار بین تمام اکانت‌ها)
+@bot.on_message(filters.command("send_all"))
+async def send_to_all(client: Client, message: Message):
+    if message.from_user.id != ADMIN_ID: return
+    if not accounts or not collected_users:
+        return await message.reply_text("❌ اکانت یا آیدی‌ای برای ارسال وجود ندارد.")
     
-    await callback.message.edit_text("🗑️ اکانت مورد نظر جهت حذف را انتخاب کنید:", reply_markup=InlineKeyboardMarkup(keyboard))
+    try:
+        ad_text = message.text.split(" ", 1)[1]
+    except IndexError:
+        return await message.reply_text("❌ لطفاً متن خود را بنویسید. مثال:\n`/send_all متن تبلیغاتی...`")
 
-@bot.on_callback_query(filters.regex(r"^del_"))
-async def perform_delete(client, callback: CallbackQuery):
-    phone = callback.data.replace("del_", "")
+    await message.reply_text(f"🚀 تقسیم کار بین {len(accounts)} اکانت و شروع ارسال به {len(collected_users)} نفر...")
     
-    if phone in active_voice_sessions:
-        try:
-            await active_voice_sessions[phone]["call_client"].leave_group_call(active_voice_sessions[phone]["chat_id"])
-            await active_voice_sessions[phone]["acc_client"].stop()
-            active_voice_sessions[phone]["job"].remove()
-            active_voice_sessions.pop(phone, None)
-        except:
-            pass
+    users_list = list(collected_users)
+    total_users = len(users_list)
+    chunk_size = max(1, total_users // len(accounts))
+    account_chunks = [users_list[i:i + chunk_size] for i in range(0, total_users, chunk_size)]
 
-    session_file = f"{SESSIONS_DIR}/{phone}.session"
-    if os.path.exists(session_file):
-        os.remove(session_file)
-        await callback.message.edit_text(f"✅ اکانت `+{phone}` با موفقیت حذف شد.", reply_markup=main_menu())
-    else:
-        await callback.message.edit_text("❌ فایل اکانت پیدا نشد.", reply_markup=main_menu())
+    async def process_account_queue(acc_index, acc, target_users):
+        success = 0
+        failed = 0
+        for user_id in target_users:
+            try:
+                await acc.send_message(user_id, ad_text)
+                success += 1
+                await asyncio.sleep(4)  # وقفه امنیتی برای جلوگیری از ریپورت
+            except Exception:
+                failed += 1
+                continue
+        await bot.send_message(ADMIN_ID, f"📊 گزارش اکانت شماره `{acc_index + 1}`:\n✅ موفق: {success}\n❌ ناموفق: {failed}")
 
-@bot.on_callback_query(filters.regex("join_voice_menu"))
-async def join_voice_menu(client, callback: CallbackQuery):
-    sessions = [f.replace(".session", "") for f in os.listdir(SESSIONS_DIR) if f.endswith(".session")]
-    if not sessions:
-        await callback.message.edit_text(
-            "📭 اول باید حداقل یک اکانت اضافه کنید.", 
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")]])
-        )
-        return
+    tasks = [process_account_queue(i, accounts[i], account_chunks[i]) for i in range(min(len(accounts), len(account_chunks)))]
+    await asyncio.gather(*tasks)
+    await message.reply_text("🏁 عملیات ارسال به پایان رسید.")
 
-    keyboard = [[InlineKeyboardButton(f"🎧 استفاده از `+{acc}`", callback_data=f"useacc_{acc}")] for acc in sessions]
-    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")])
-    
-    await callback.message.edit_text("🎧 اکانتی که می‌خواهید با آن وارد ویس شوید را انتخاب کنید:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-@bot.on_callback_query(filters.regex(r"^useacc_"))
-async def select_account_for_voice(client, callback: CallbackQuery):
-    phone = callback.data.replace("useacc_", "")
-    user_id = callback.from_user.id
-    user_states[user_id] = {"step": "waiting_voice_link", "selected_account": phone}
-    
-    await callback.message.edit_text(
-        f"🔗 اکانت انتخابی: `+{phone}`\n\n"
-        "اکنون **لینک گروه یا کانال** مورد نظر را ارسال کنید:",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")]])
+# 6️⃣ مشاهده آمار
+@bot.on_message(filters.command("stats"))
+async def stats_cmd(client: Client, message: Message):
+    if message.from_user.id != ADMIN_ID: return
+    await message.reply_text(
+        f"📊 **آمار ربات شما:**\n"
+        f"👥 اکانت‌های فعال متصل: `{len(accounts)}`\n"
+        f"🎯 آیدی‌های جمع‌آوری شده: `{len(collected_users)}` نفر"
     )
 
-@bot.on_callback_query(filters.regex("leave_voice_menu"))
-async def leave_voice_menu(client, callback: CallbackQuery):
-    if not active_voice_sessions:
-        await callback.message.edit_text(
-            "📭 هیچ اکانتی در حال حاضر در ویس فعال نیست.", 
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")]])
-        )
-        return
 
-    keyboard = [[InlineKeyboardButton(f"🚪 خروج `+{phone}` از ویس", callback_data=f"leave_{phone}")] for phone in active_voice_sessions]
-    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_home")])
-    
-    await callback.message.edit_text("🚪 اکانتی که می‌خواهید از ویس خارج کنید را انتخاب کنید:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-@bot.on_callback_query(filters.regex(r"^leave_"))
-async def perform_leave(client, callback: CallbackQuery):
-    phone = callback.data.replace("leave_", "")
-    if phone in active_voice_sessions:
-        try:
-            session_data = active_voice_sessions[phone]
-            await session_data["call_client"].leave_group_call(session_data["chat_id"])
-            await session_data["acc_client"].stop()
-            session_data["job"].remove()
-            active_voice_sessions.pop(phone, None)
-            
-            await callback.message.edit_text(f"✅ اکانت `+{phone}` با موفقیت از ویس خارج شد.", reply_markup=main_menu())
-        except Exception as e:
-            await callback.message.edit_text(f"❌ خطا در خروج: {e}", reply_markup=main_menu())
-    else:
-        await callback.message.edit_text("❌ این اکانت در لیست ویس‌های فعال نیست.", reply_markup=main_menu())
-
-@bot.on_callback_query(filters.regex("back_home"))
-async def back_home(client, callback: CallbackQuery):
-    user_states.pop(callback.from_user.id, None)
-    await callback.message.edit_text(
-        "🤖 **پنل حرفه‌ای مدیریت اکانت‌ها و ویس‌کال تلگرام**\n\n"
-        "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
-        reply_markup=main_menu()
-    )
-
-if __name__ == "__main__":
-    print("Bot is running...")
-    bot.run()
+bot.run()
