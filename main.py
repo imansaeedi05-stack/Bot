@@ -1,22 +1,15 @@
-import asyncio
+import logging
 import random
-from pyrogram import Client, filters
-from pyrogram.types import Message
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 
 # اطلاعات شما
-API_ID = 38859635
-API_HASH = "5232c81647167a853b97fcadf68ea9d2"
 BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
+TARGET_GROUP = "Linkkadde1"  # یا آیدی عددی گروه
 
-# لینک گروه مورد نظر
-TARGET_GROUP = "Linkkadde1"
-
-# ساخت کلاینت ربات
-app = Client(
-    "my_bot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    bot_token=BOT_TOKEN
+# تنظیمات لاگ‌گیری برای دیدن وضعیت در Render
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
 SAMPLE_REPLIES = [
@@ -27,29 +20,42 @@ SAMPLE_REPLIES = [
     "پیامت رو دیدم، چه برنامه‌ای داری براش؟"
 ]
 
-@app.on_message(filters.chat(TARGET_GROUP) & ~filters.bot)
-async def chat_in_group(client: Client, message: Message):
-    if not message.text:
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    if not message or not message.text:
         return
 
-    await asyncio.sleep(random.uniform(2.0, 4.0))
+    # بررسی اینکه پیام در همان گروه مورد نظر باشد (چک کردن یوزرنیم یا آیدی گروه)
+    chat = message.chat
+    if chat.username and chat.username.lower() != TARGET_GROUP.lower():
+        return
 
+    # ارسال وضعیت تایپ کردن
     try:
-        await client.send_chat_action(message.chat.id, "typing")
+        await context.bot.send_chat_action(chat_id=chat.id, action="typing")
     except Exception:
         pass
-    
-    await asyncio.sleep(1.5)
+
+    # انتخاب پاسخ راندوم
     reply_text = random.choice(SAMPLE_REPLIES)
+
+    # پاسخ دادن با ریپلای
     await message.reply_text(reply_text, quote=True)
 
-if __name__ == "__main__":
-    print("ربات در حال راه‌اندازی...")
-    # راه‌اندازی ایمن حلقه رویداد برای جلوگیری از خطای پایتون جدید
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+def main():
+    # ساخت اپلیکیشن ربات
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    # فیلتر کردن پیام‌های متنی در گروه‌ها
+    chat_filter = filters.Chat(username=TARGET_GROUP) & filters.TEXT & ~filters.COMMAND
     
-    app.run()
+    # اضافه کردن هندلر پیام
+    application.add_handler(MessageHandler(chat_filter, handle_message))
+
+    print("ربات با کتابخانه استاندارد روشن شد و منتظر پیام است...")
+    
+    # اجرا با مدیریت صحیح Event Loop (بدون خطای ترد)
+    application.run_polling()
+
+if __name__ == "__main__":
+    main()
