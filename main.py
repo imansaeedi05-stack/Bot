@@ -1,16 +1,14 @@
-import logging
 import random
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+import telebot
 
-# اطلاعات ربات شما
+# توکن ربات شما
 BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
+
+# آیدی یا یوزرنیم گروه (بدون @)
 TARGET_GROUP = "Linkkadde1"
 
-# تنظیمات لاگ‌گیری
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+# ساخت شیء ربات
+bot = telebot.TeleBot(BOT_TOKEN)
 
 SAMPLE_REPLIES = [
     "حله، موافقم!",
@@ -20,31 +18,31 @@ SAMPLE_REPLIES = [
     "پیامت رو دیدم، چه برنامه‌ای داری براش؟"
 ]
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    if not message or not message.text:
+# تابع دریافت تمام پیام‌های متنی در گروه‌ها
+@bot.message_handler(func=lambda message: True, content_types=['text'])
+def handle_all_messages(message):
+    # بررسی اینکه پیام در گروه باشد
+    if message.chat.type not in ['group', 'supergroup']:
         return
 
-    chat = message.chat
-    if chat.username and chat.username.lower() != TARGET_GROUP.lower():
+    # بررسی اینکه پیام مربوط به همان گروه هدف باشد (چک کردن یوزرنیم گروه)
+    if message.chat.username and message.chat.username.lower() != TARGET_GROUP.lower():
         return
 
     try:
-        await context.bot.send_chat_action(chat_id=chat.id, action="typing")
+        # نمایش وضعیت تایپ کردن
+        bot.send_chat_action(message.chat.id, 'typing')
     except Exception:
         pass
 
+    # انتخاب پاسخ راندوم
     reply_text = random.choice(SAMPLE_REPLIES)
-    await message.reply_text(reply_text, quote=True)
 
-def main():
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    chat_filter = filters.Chat(username=TARGET_GROUP) & filters.TEXT & ~filters.COMMAND
-    application.add_handler(MessageHandler(chat_filter, handle_message))
-
-    print("ربات با موفقیت روشن شد و آماده به کار است...")
-    application.run_polling()
+    # ارسال پاسخ با ریپلای
+    bot.reply_to(message, reply_text)
 
 if __name__ == "__main__":
-    main()
+    print("ربات با موفقیت روشن شد و در حال گوش دادن به گروه است...")
+    # اجرای مداوم ربات بدون خطای Event Loop
+    bot.infinity_none_stop = True
+    bot.infinity_polling(timeout=60, long_polling_timeout=60)
