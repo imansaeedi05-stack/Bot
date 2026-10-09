@@ -29,11 +29,11 @@ async def start_cmd(client: Client, message: Message):
         return await message.reply_text("❌ شما اجازه دسترسی به این ربات را ندارید.")
 
     text = (
-        "🤖 **سیستم استخراج آیدی و ارسال انبوه**\n\n"
+        "🤖 **سیستم پیشرفته استخراج و ارسال انبوه**\n\n"
         "1️⃣ `/login <شماره>` : شروع ورود اکانت (مثال: `/login +98912...`)\n"
         "2️⃣ `/code <کد>` : ورود کد تایید تلگرام\n"
         "3️⃣ `/password <رمز>` : ورود رمز دوم (در صورت داشتن 2FA)\n"
-        "4️⃣ `/join <لینک گروه>` : **فقط اولین اکانت** وارد گروه شده و آیدی‌ها را جمع می‌کند\n"
+        "4️⃣ `/join <لینک گروه>` : فقط اولین اکانت وارد گروه شده و آیدی‌ها را جمع می‌کند\n"
         "5️⃣ `/send_all <متن>` : تقسیم آیدی‌ها بین تمام اکانت‌ها و ارسال امن\n"
         "6️⃣ `/stats` : مشاهده آمار اکانت‌ها و آیدی‌ها"
     )
@@ -128,7 +128,6 @@ async def enter_password(client: Client, message: Message):
 
 # نهایی کردن و ذخیره اکانت متصل شده
 async def finalize_login(user_client, session_string, message):
-    # تنظیم هندلر استخراج آیدی (فقط روی اولین اکانت یا تمام اکانت‌هایی که پیام می‌بینند فعال می‌شود)
     @user_client.on_message(filters.group)
     async def collect_only(c: Client, msg: Message):
         user = msg.from_user
@@ -156,7 +155,6 @@ async def join_group(client: Client, message: Message):
     
     try:
         link = message.text.split(" ", 1)[1]
-        # فقط اکانت اول (اندیس 0) وارد گروه می‌شود
         first_acc = accounts[0]
         chat = await first_acc.join_chat(link)
         
@@ -216,4 +214,14 @@ async def stats_cmd(client: Client, message: Message):
     )
 
 
-bot.run()
+# اجرای استاندارد ربات (سازگار با هاست Render بدون خطای لوپ)
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(bot.start())
+        print("🤖 ربات مدیریت با موفقیت روشن شد...")
+        asyncio.get_event_loop().run_forever()
+    except KeyboardInterrupt:
+        print("⚠️ ربات متوقف شد.")
+    finally:
+        loop.run_until_complete(bot.stop())
