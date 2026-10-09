@@ -3,7 +3,7 @@ import random
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-# اطلاعاتی که فرستادید
+# اطلاعات شما
 API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
 BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
@@ -11,7 +11,7 @@ BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
 # لینک گروه مورد نظر
 TARGET_GROUP = "Linkkadde1"
 
-# ساخت کلاینت ربات با توکن رسمی
+# ساخت کلاینت ربات
 app = Client(
     "my_bot",
     api_id=API_ID,
@@ -19,7 +19,6 @@ app = Client(
     bot_token=BOT_TOKEN
 )
 
-# لیست پاسخ‌های نمونه (می‌توانید تغییر دهید)
 SAMPLE_REPLIES = [
     "حله، موافقم!",
     "جدی؟ بیشتر توضیح بده.",
@@ -30,11 +29,9 @@ SAMPLE_REPLIES = [
 
 @app.on_message(filters.chat(TARGET_GROUP) & ~filters.bot)
 async def chat_in_group(client: Client, message: Message):
-    # بررسی اینکه پیام متن داشته باشد
     if not message.text:
         return
 
-    # تاخیر کوتاه برای طبیعی‌تر شدن پاسخ‌دهی (بین ۲ تا ۴ ثانیه)
     await asyncio.sleep(random.uniform(2.0, 4.0))
 
     try:
@@ -43,12 +40,16 @@ async def chat_in_group(client: Client, message: Message):
         pass
     
     await asyncio.sleep(1.5)
-
-    # انتخاب پاسخ راندوم
     reply_text = random.choice(SAMPLE_REPLIES)
-
-    # ارسال پاسخ با ریپلای به پیام ممبر
     await message.reply_text(reply_text, quote=True)
 
-print("ربات با موفقیت روشن شد و در حال گوش دادن به گروه است...")
-app.run()
+if __name__ == "__main__":
+    print("ربات در حال راه‌اندازی...")
+    # راه‌اندازی ایمن حلقه رویداد برای جلوگیری از خطای پایتون جدید
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    app.run()
