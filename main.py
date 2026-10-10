@@ -13,7 +13,7 @@ BOT_TOKEN = "8891711180:AAHjQ-iPojdYXWOs1vT9dFRKXlzEIVyYcEU"
 # کلید هوش مصنوعی 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
 
-# یوزرنیم گروه شما
+# یوزرنیم دقیق گروه شما
 TARGET_GROUP = "Linkkadde1"
 
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
@@ -65,11 +65,9 @@ async def interactive_auth(event):
     if text.startswith('/'):
         return
 
-    # مرحله ۱: دریافت شماره تلفن
     if state == "waiting_phone":
         await process_phone_number(event, user_id, text)
 
-    # مرحله ۲: دریافت کد تأیید
     elif state == "waiting_code":
         code = text
         temp_client = user_states[user_id]["temp_client"]
@@ -81,7 +79,6 @@ async def interactive_auth(event):
             await finish_connection(event, temp_client, user_id)
         except Exception as e:
             err_str = str(e)
-            # بررسی دقیق خطای رمز دوم در تلگرام
             if "SessionPasswordNeededError" in err_str or "password" in err_str.lower() or "Two-steps" in err_str:
                 user_states[user_id]["step"] = "waiting_password"
                 await event.respond("🔐 اکانت شما دارای رمز دوم (تایید دو مرحله‌ای) است. لطفاً **رمز عبور** خود را وارد کنید:")
@@ -93,7 +90,6 @@ async def interactive_auth(event):
                     pass
                 del user_states[user_id]
 
-    # مرحله ۳: دریافت رمز دو مرحله‌ای (Password)
     elif state == "waiting_password":
         password = text
         temp_client = user_states[user_id]["temp_client"]
@@ -129,26 +125,42 @@ async def finish_connection(event, temp_client, user_id):
     user_client = temp_client
     me = await user_client.get_me()
     
-    await event.respond(f"✅ اکانت `{me.first_name}` با موفقیت متصل شد و از این پس به پیام‌های گروه **{TARGET_GROUP}** پاسخ خواهد داد!")
-    
-    # فعال‌سازی پاسخگویی هوشمند در گروه
-    @user_client.on(events.NewMessage(chats=TARGET_GROUP))
-    async def handle_group_message(msg_event):
-        if msg_event.out or msg_event.sender.bot:
-            return
-        msg_text = msg_event.raw_text
-        if not msg_text:
-            return
+    await event.respond(f"✅ اکانت `{me.first_name}` با موفقیت متصل شد!")
 
-        try:
-            response = ai_client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=msg_text,
-                config={"system_instruction": SYSTEM_INSTRUCTION},
-            )
-            await msg_event.reply(response.text.strip())
-        except Exception as e:
-            print(f"خطا در هوش مصنوعی: {e}")
+    try:
+        # پیدا کردن اطلاعات دقیق گروه با استفاده از یوزرنیم
+        group_entity = await user_client.get_entity(TARGET_GROUP)
+        group_id = group_entity.id
+
+        # فیلتر کردن دقیق رویدادها فقط برای همین گروه
+        @user_client.on(events.NewMessage(chats=group_id))
+        async def handle_group_message(msg_event):
+            # اگر پیام از طرف خود اکانت متصل بود یا ربات‌ها بود، پاسخ نده
+            if msg_event.out or msg_event.sender.bot:
+                return
+            
+            msg_text = msg_event.raw_text
+            if not msg_text:
+                return
+
+            print(f"پیام جدید در گروه هدف دریافت شد: {msg_text}")
+
+            try:
+                response = ai_client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=msg_text,
+                    config={"system_instruction": SYSTEM_INSTRUCTION},
+                )
+                ai_reply = response.text.strip()
+                await msg_event.reply(ai_reply)
+                print(f"پاسخ هوش مصنوعی در گروه ارسال شد: {ai_reply}")
+            except Exception as e:
+                print(f"خطا در هوش مصنوعی: {e}")
+
+        await event.respond(f"🤖 ربات هوش مصنوعی با موفقیت تنظیم شد و **فقط** به پیام‌های گروه **{TARGET_GROUP}** پاسخ خواهد داد.")
+
+    except Exception as e:
+        await event.respond(f"⚠️ اکانت متصل شد، اما خطا در پیدا کردن گروه `{TARGET_GROUP}`:\n`{e}`\nلطفاً مطمئن شوید اکانت شما عضو این گروه است.")
 
     if user_id in user_states:
         del user_states[user_id]
