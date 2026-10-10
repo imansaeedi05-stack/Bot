@@ -1,48 +1,35 @@
-import random
-import telebot
+import os
+from pyrogram import Client, filters
+from pyrogram.types import Message
+from google import genai
 
-# توکن ربات شما
-BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
+# خواندن اطلاعات از متغیرهای محیطی هاست یا گیت‌هاب
+API_ID = int(os.environ.get("API_ID", 0))
+API_HASH = os.environ.get("API_HASH", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# آیدی یا یوزرنیم گروه (بدون @)
-TARGET_GROUP = "Linkkadde1"
+ai_client = genai.Client(api_key=GEMINI_API_KEY)
+app = Client("my_account", api_id=API_ID, api_hash=API_HASH)
 
-# ساخت شیء ربات
-bot = telebot.TeleBot(BOT_TOKEN)
+SYSTEM_INSTRUCTION = """
+تو یک دستیار هوشمند در تلگرام هستی. پاسخ‌ها را کوتاه، دوستانه، محترمانه و به زبان فارسی ارسال کن. 
+طوری پاسخ بده که انگار صاحب اکانت هستی و پاسخ می‌دهی.
+"""
 
-SAMPLE_REPLIES = [
-    "حله، موافقم!",
-    "جدی؟ بیشتر توضیح بده.",
-    "درسته، حق با توئه.",
-    "چه جالب، چطور مگه؟",
-    "پیامت رو دیدم، چه برنامه‌ای داری براش؟"
-]
-
-# تابع دریافت تمام پیام‌های متنی در گروه‌ها
-@bot.message_handler(func=lambda message: True, content_types=['text'])
-def handle_all_messages(message):
-    # بررسی اینکه پیام در گروه باشد
-    if message.chat.type not in ['group', 'supergroup']:
+@app.on_message(filters.private & ~filters.me & ~filters.bot)
+async def handle_private_message(client: Client, message: Message):
+    if not message.text:
         return
-
-    # بررسی اینکه پیام مربوط به همان گروه هدف باشد (چک کردن یوزرنیم گروه)
-    if message.chat.username and message.chat.username.lower() != TARGET_GROUP.lower():
-        return
-
     try:
-        # نمایش وضعیت تایپ کردن
-        bot.send_chat_action(message.chat.id, 'typing')
-    except Exception:
-        pass
-
-    # انتخاب پاسخ راندوم
-    reply_text = random.choice(SAMPLE_REPLIES)
-
-    # ارسال پاسخ با ریپلای
-    bot.reply_to(message, reply_text)
+        response = ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=message.text,
+            config={"system_instruction": SYSTEM_INSTRUCTION},
+        )
+        await message.reply_text(response.text.strip())
+    except Exception as e:
+        print(f"خطا: {e}")
 
 if __name__ == "__main__":
-    print("ربات با موفقیت روشن شد و در حال گوش دادن به گروه است...")
-    # اجرای مداوم ربات بدون خطای Event Loop
-    bot.infinity_none_stop = True
-    bot.infinity_polling(timeout=60, long_polling_timeout=60)
+    print("یوزربرنامه فعال شد...")
+    app.run()
