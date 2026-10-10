@@ -1,5 +1,6 @@
 import os
 import asyncio
+from aiohttp import web
 from telethon import TelegramClient, events
 from google import genai
 
@@ -14,10 +15,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
 # یوزرنیم گروه شما
 TARGET_GROUP = "Linkkadde1"
 
-# راه‌اندازی کلاینت هوش مصنوعی
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
-
-# راه‌اندازی ربات اصلی مدیریت با Telethon
 bot = TelegramClient('management_bot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 user_client = None
@@ -53,8 +51,6 @@ async def connect_userbot(event):
 
     try:
         from telethon.sessions import StringSession
-        
-        # ساخت کلاینت اکانت کاربر با Telethon
         user_client = TelegramClient(StringSession(session_string), API_ID, API_HASH)
         await user_client.connect()
 
@@ -64,13 +60,10 @@ async def connect_userbot(event):
 
         me = await user_client.get_me()
 
-        # رویداد دریافت پیام جدید در گروه مورد نظر
         @user_client.on(events.NewMessage(chats=TARGET_GROUP))
         async def handle_group_message(msg_event):
-            # اگر پیام از طرف خودمان یا ربات‌ها بود نادیده بگیر
             if msg_event.out or msg_event.sender.bot:
                 return
-            
             msg_text = msg_event.raw_text
             if not msg_text:
                 return
@@ -81,19 +74,30 @@ async def connect_userbot(event):
                     contents=msg_text,
                     config={"system_instruction": SYSTEM_INSTRUCTION},
                 )
-                
-                ai_reply = response.text.strip()
-                # ریپلای کردن به پیام ممبر در گروه
-                await msg_event.reply(ai_reply)
-
+                await msg_event.reply(response.text.strip())
             except Exception as e:
-                print(f"خطا در پاسخگویی هوش مصنوعی: {e}")
+                print(f"خطا: {e}")
 
-        await event.respond(f"✅ اکانت `{me.first_name}` با موفقیت متصل شد و فقط به پیام‌های گروه **Linkkadde1** پاسخ خواهد داد!")
-
+        await event.respond(f"✅ اکانت `{me.first_name}` متصل شد!")
     except Exception as e:
-        await event.respond(f"❌ خطا در اتصال:\n`{e}`")
+        await event.respond(f"❌ خطا: `{e}`")
+
+# سرور وب کوچک برای پاسخ به پورت رندر
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+async def start_web_server():
+    app = web.Application()
+    app.add_routes([web.get('/', handle)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"Web server started on port {port}")
 
 if __name__ == "__main__":
-    print("ربات مدیریت با Telethon در حال اجرا است...")
+    print("ربات در حال اجرا است...")
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(start_web_server())
     bot.run_until_disconnected()
