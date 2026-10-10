@@ -2,12 +2,13 @@ import os
 import asyncio
 from aiohttp import web
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 from google import genai
 
 # --- اطلاعات تلگرام شما ---
 API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
-BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
+BOT_TOKEN = "8891711180:AAHjQ-iPojdYXWOs1vT9dFRKXlzEIVyYcEU"
 
 # کلید هوش مصنوعی 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
@@ -20,6 +21,9 @@ bot = TelegramClient('management_bot', API_ID, API_HASH).start(bot_token=BOT_TOK
 
 user_client = None
 
+# حافظه موقت برای ذخیره مرحله ورود هر کاربر (شماره، کد و پسورد)
+user_states = {}
+
 SYSTEM_INSTRUCTION = """
 تو یک دستیار هوشمند و صمیمی در یک گروه تلگرامی هستی.
 پاسخ‌ها را کوتاه، دوستانه، جذاب و به زبان فارسی ارسال کن.
@@ -31,56 +35,105 @@ async def start_handler(event):
     if event.is_private:
         await event.respond(
             "سلام! به ربات مدیریت هوشمند گروه خوش آمدید.\n\n"
-            "برای اتصال اکانت شخصی، لطفاً **Telethon String Session** خود را ارسال کنید:\n"
-            "`/connect STRING_SESSION`"
+            "برای اتصال اکانت شخصی خود، روی دکمه زیر کلیک کنید:\n"
+            "/connect"
         )
 
 @bot.on(events.NewMessage(pattern='/connect', incoming=True))
-async def connect_userbot(event):
-    global user_client
+async def connect_start(event):
     if not event.is_private:
         return
-        
-    parts = event.text.split(maxsplit=1)
-    if len(parts) < 2:
-        await event.respond("❌ لطفاً String Session را ارسال کنید.\nمثال:\n`/connect YOUR_STRING_SESSION`")
+    user_id = event.sender_id
+    user_states[user_id] = {"step": "waiting_phone"}
+    await event.respond("📞 لطفاً **شماره تلفن** اکانت تلگرام خود را با پیش‌شماره کشور بفرستید (مثلاً `989123456789+`):")
+
+@bot.on(events.NewMessage(incoming=True))
+async def interactive_auth(event):
+    if not event.is_private:
+        return
+    user_id = event.sender_id
+    if user_id not in user_states:
         return
 
-    session_string = parts[1].strip()
-    await event.respond("⏳ در حال متصل شدن به اکانت...")
+    state = user_states[user_id]["step"]
+    text = event.raw_text.strip()
 
-    try:
-        from telethon.sessions import StringSession
-        user_client = TelegramClient(StringSession(session_string), API_ID, API_HASH)
-        await user_client.connect()
+    # مرحله ۱: دریافت شماره تلفن و ارسال کد تلگرام
+    if state == "waiting_phone":
+        phone = text
+        user_states[user_id]["phone"] = phone
+        await event.respond("⏳ در حال ارسال کد تأیید به تلگرام شما...")
+        try:
+            temp_client = TelegramClient(StringSession(), API_ID, API_HASH)
+            await temp_client.connect()
+            sent_code = await temp_client.send_code_request(phone)
+            user_states[user_id]["temp_client"] = temp_client
+            user_states[user_id]["phone_code_hash"] = sent_code.phone_code_hash
+            user_states[user_id]["step"] = "waiting_code"
+            await event.respond("📥 کد تأیید تلگرام برای شما ارسال شد. لطفاً **کد** را بفرستید (بین اعداد فاصله نگذارید):")
+        except Exception as e:
+            await event.respond(f"❌ خطا در ارسال کد:\n`{e}`")
+            del user_states[user_id]
 
-        if not await user_client.is_user_authorized():
-            await event.respond("❌ سشن نامعتبر است یا منقضی شده است.")
+    # مرحله ۲: دریافت کد تأیید
+    elif state == "waiting_code":
+        code = text
+        temp_client = user_states[user_id]["temp_client"]
+        phone = user_states[user_id]["phone"]
+        phone_code_hash = user_states[user_id]["phone_code_hash"]
+
+        try:
+            await temp_client.sign_in(phone, code, phone_code_hash)
+            await finish_connection(event, temp_client, user_id)
+        except Exception as e:
+            if "SessionPasswordNeededError" in str(e) or "Two-step verification" in str(e):
+                user_states[user_id]["step"] = "waiting_password"
+                await event.respond("🔐 اکانت شما دارای رمز دوم (تایید دو مرحله‌ای) است. لطفاً **رمز عبور** خود را وارد کنید:")
+            else:
+                await event.respond(f"❌ خطا در ورود:\n`{e}`")
+                await temp_client.disconnect()
+                del user_states[user_id]
+
+    # مرحله ۳: دریافت رمز دو مرحله‌ای (Password)
+    elif state == "waiting_password":
+        password = text
+        temp_client = user_states[user_id]["temp_client"]
+
+        try:
+            await temp_client.sign_in(password=password)
+            await finish_connection(event, temp_client, user_id)
+        except Exception as e:
+            await event.respond(f"❌ رمز اشتباه است یا خطایی رخ داد:\n`{e}`")
+            await temp_client.disconnect()
+            del user_states[user_id]
+
+async def finish_connection(event, temp_client, user_id):
+    global user_client
+    user_client = temp_client
+    me = await user_client.get_me()
+    
+    await event.respond(f"✅ اکانت `{me.first_name}` با موفقیت متصل شد و از این پس به پیام‌های گروه **{TARGET_GROUP}** پاسخ خواهد داد!")
+    
+    # فعال‌سازی پاسخگویی هوشمند در گروه
+    @user_client.on(events.NewMessage(chats=TARGET_GROUP))
+    async def handle_group_message(msg_event):
+        if msg_event.out or msg_event.sender.bot:
+            return
+        msg_text = msg_event.raw_text
+        if not msg_text:
             return
 
-        me = await user_client.get_me()
+        try:
+            response = ai_client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=msg_text,
+                config={"system_instruction": SYSTEM_INSTRUCTION},
+            )
+            await msg_event.reply(response.text.strip())
+        except Exception as e:
+            print(f"خطا در هوش مصنوعی: {e}")
 
-        @user_client.on(events.NewMessage(chats=TARGET_GROUP))
-        async def handle_group_message(msg_event):
-            if msg_event.out or msg_event.sender.bot:
-                return
-            msg_text = msg_event.raw_text
-            if not msg_text:
-                return
-
-            try:
-                response = ai_client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=msg_text,
-                    config={"system_instruction": SYSTEM_INSTRUCTION},
-                )
-                await msg_event.reply(response.text.strip())
-            except Exception as e:
-                print(f"خطا: {e}")
-
-        await event.respond(f"✅ اکانت `{me.first_name}` متصل شد!")
-    except Exception as e:
-        await event.respond(f"❌ خطا: `{e}`")
+    del user_states[user_id]
 
 # سرور وب کوچک برای پاسخ به پورت رندر
 async def handle(request):
@@ -94,10 +147,9 @@ async def start_web_server():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    print(f"Web server started on port {port}")
 
 if __name__ == "__main__":
-    print("ربات در حال اجرا است...")
+    print("ربات تعاملی ورود به اکانت در حال اجرا است...")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(start_web_server())
     bot.run_until_disconnected()
