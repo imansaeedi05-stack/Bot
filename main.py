@@ -1,4 +1,5 @@
 import os
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from google import genai
@@ -8,8 +9,8 @@ API_ID = 38859635
 API_HASH = "5232c81647167a853b97fcadf68ea9d2"
 BOT_TOKEN = "8294434432:AAGpD8JW1PwaCgMaIORKG8JnSwDE8g4Xyi8"
 
-# کلید هوش مصنوعی را اینجا جایگزین کنید
-GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"
+# کلید هوش مصنوعی را اینجا جایگزین کنید (یا از متغیر محیطی بخوانید)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
 
 # یوزرنیم گروه شما
 TARGET_GROUP = "Linkkadde1"
@@ -82,4 +83,11 @@ async def connect_userbot(client: Client, message: Message):
 
 if __name__ == "__main__":
     print("ربات در حال اجرا است...")
+    # اصلاحیه برای مدیریت Event Loop در نسخه جدید پایتون
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
     bot.run()
