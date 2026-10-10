@@ -43,14 +43,11 @@ async def connect_start(event):
         return
     user_id = event.sender_id
     
-    # بررسی اینکه آیا کاربر شماره را هم جلوش نوشته است یا خیر
     parts = event.raw_text.split(maxsplit=1)
     if len(parts) > 1:
-        # اگر کاربر شماره را همان اول نوشته بود، مستقیم برود سراغ ارسال کد
         phone = parts[1].strip()
         await process_phone_number(event, user_id, phone)
     else:
-        # اگر فقط /connect را نوشته بود، شماره را بپرسد
         user_states[user_id] = {"step": "waiting_phone"}
         await event.respond("📞 لطفاً **شماره تلفن** اکانت تلگرام خود را با پیش‌شماره کشور بفرستید (مثلاً `905382405743+`):")
 
@@ -65,7 +62,6 @@ async def interactive_auth(event):
     state = user_states[user_id]["step"]
     text = event.raw_text.strip()
     
-    # اگر کاربر وسط مراحل دوباره دستورات سیستمی فرستاد، نادیده بگیر یا ریست کن
     if text.startswith('/'):
         return
 
@@ -81,7 +77,8 @@ async def interactive_auth(event):
         phone_code_hash = user_states[user_id]["phone_code_hash"]
 
         try:
-            await temp_client.sign_in(phone, code, phone_code_hash)
+            # اصلاح نحوه ارسال پارامترها به صورت keyword arguments
+            await temp_client.sign_in(phone=phone, code=code, phone_code_hash=phone_code_hash)
             await finish_connection(event, temp_client, user_id)
         except Exception as e:
             if "SessionPasswordNeededError" in str(e) or "Two-step verification" in str(e):
