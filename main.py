@@ -77,11 +77,12 @@ async def interactive_auth(event):
         phone_code_hash = user_states[user_id]["phone_code_hash"]
 
         try:
-            # اصلاح نحوه ارسال پارامترها به صورت keyword arguments
             await temp_client.sign_in(phone=phone, code=code, phone_code_hash=phone_code_hash)
             await finish_connection(event, temp_client, user_id)
         except Exception as e:
-            if "SessionPasswordNeededError" in str(e) or "Two-step verification" in str(e):
+            err_str = str(e)
+            # بررسی دقیق خطای رمز دوم در تلگرام
+            if "SessionPasswordNeededError" in err_str or "password" in err_str.lower() or "Two-steps" in err_str:
                 user_states[user_id]["step"] = "waiting_password"
                 await event.respond("🔐 اکانت شما دارای رمز دوم (تایید دو مرحله‌ای) است. لطفاً **رمز عبور** خود را وارد کنید:")
             else:
